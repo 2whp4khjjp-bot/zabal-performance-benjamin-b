@@ -21,13 +21,9 @@ describe('servicio local', () => {
     expect(updated.weight).toBe(72.5);
     expect(updated.fatigue).toBe(5);
   });
-  it('el jugador solo puede leer y guardar sus propios datos', async () => {
+  it('no permite acceso con PIN de jugador', async () => {
     const service = new LocalDataService();
-    const auth = await service.authenticate('1001', 'player');
-    const players = await service.getPlayers(auth.token);
-    const measurements = await service.getMeasurements(auth.token);
-    expect(players).toHaveLength(1);
-    expect(measurements.every((item) => item.playerId === players[0].id)).toBe(true);
+    await expect(service.authenticate('1001', 'player')).rejects.toThrow('cuerpo técnico');
   });
   it('guarda minutos de partido solo para el cuerpo técnico', async () => {
     const service = new LocalDataService();
@@ -40,7 +36,6 @@ describe('servicio local', () => {
     expect(saved.durationMinutes).toBe(90);
     expect((await service.getMatches(staff.token))[0].minutes[0].minutes).toBe(74);
 
-    const player = await service.authenticate('1001', 'player');
-    await expect(service.getMatches(player.token)).rejects.toThrow('cuerpo técnico');
+    await expect(service.authenticate('1001', 'player')).rejects.toThrow('cuerpo técnico');
   });
 });

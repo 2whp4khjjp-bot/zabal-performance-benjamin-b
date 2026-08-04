@@ -42,10 +42,7 @@ export class LocalDataService implements DataService {
       const inputHash = await sha256(pin);
       if (inputHash !== environment.staffPinHash) throw new DataServiceError('El PIN del cuerpo técnico no es correcto.', 'INVALID_PIN');
     } else {
-      const players = readJson(PLAYERS_KEY, demoPlayers).filter((item) => item.active).sort((a, b) => a.order - b.order);
-      const playerIndex = Number(pin) - 1001;
-      player = /^\d{4}$/.test(pin) ? players[playerIndex] : undefined;
-      if (!player) throw new DataServiceError('El PIN de jugador no es correcto.', 'INVALID_PIN');
+      throw new DataServiceError('En este equipo el acceso está reservado al cuerpo técnico.', 'FORBIDDEN');
     }
     const session: AuthSession = {
       token: `local-${crypto.randomUUID()}`,
@@ -98,6 +95,10 @@ export class LocalDataService implements DataService {
 
     const now = new Date();
     const previous = existingIndex >= 0 ? items[existingIndex] : undefined;
+    const previousCreatedAt = previous ? new Date(previous.createdAt).getTime() : NaN;
+    if (previous && auth.role !== 'staff' && (!Number.isFinite(previousCreatedAt) || Date.now() - previousCreatedAt > 24 * 60 * 60 * 1000)) {
+      throw new DataServiceError('Han pasado más de 24 horas. Solo el cuerpo técnico puede modificar este registro.', 'EDIT_WINDOW_EXPIRED');
+    }
     const measurement: Measurement = {
       id: previous?.id || crypto.randomUUID(),
       date,

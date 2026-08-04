@@ -13,7 +13,7 @@ type LoginScreenProps = {
 export function LoginScreen({ onLogin, loading, error }: LoginScreenProps) {
   const [pin, setPin] = useState('');
   const [visible, setVisible] = useState(false);
-  const [role, setRole] = useState<AuthRole>('player');
+  const role: AuthRole = 'staff';
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -40,13 +40,9 @@ export function LoginScreen({ onLogin, loading, error }: LoginScreenProps) {
           <div className="login-card__icon"><LockKeyhole size={26} aria-hidden="true" /></div>
           <p className="eyebrow eyebrow--dark">Acceso seguro</p>
           <h2 id="login-title">Entrar en Zabal Performance</h2>
-          <p>Elige tu tipo de acceso. La sesión permanecerá abierta durante {appConfig.sessionDurationMinutes} minutos.</p>
-          <div className="login-role" role="group" aria-label="Tipo de acceso">
-            <button type="button" className={role === 'player' ? 'active' : ''} onClick={() => { setRole('player'); setPin(''); }}>Soy jugador</button>
-            <button type="button" className={role === 'staff' ? 'active' : ''} onClick={() => { setRole('staff'); setPin(''); }}>Cuerpo técnico</button>
-          </div>
+          <p>Acceso exclusivo para el cuerpo técnico. La sesión permanecerá abierta durante {appConfig.sessionDurationMinutes} minutos.</p>
           <form onSubmit={submit} noValidate>
-            <label htmlFor="access-pin">{role === 'player' ? 'Tu PIN personal' : 'PIN del cuerpo técnico'}</label>
+            <label htmlFor="access-pin">PIN del cuerpo técnico</label>
             <div className="pin-field">
               <input
                 id="access-pin"
@@ -70,7 +66,7 @@ export function LoginScreen({ onLogin, loading, error }: LoginScreenProps) {
             </button>
           </form>
           <div className="security-note"><ShieldCheck size={18} /> El PIN no se guarda en este dispositivo.</div>
-          {environment.dataProvider === 'local' && <div className="demo-note">Demostración · {role === 'player' ? <>jugador: <strong>1001</strong></> : <>cuerpo técnico: <strong>2026</strong></>}</div>}
+          {environment.dataProvider === 'local' && <div className="demo-note">Demostración · cuerpo técnico: <strong>2026</strong></div>}
         </div>
       </section>
     </main>

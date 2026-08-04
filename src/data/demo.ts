@@ -1,18 +1,16 @@
 import type { Measurement, Player, TrainingSession } from '../types';
 
 const names = [
-  'Adrián Vega', 'Bruno Castillo', 'Carlos Medina', 'Darío Prieto',
-  'Elías Navarro', 'Fabio Serrano', 'Gael Romero', 'Hugo Torres',
-  'Iván Lozano', 'Jairo Campos', 'Leo Ramírez', 'Marcos Vidal',
-  'Nico Herrera', 'Óscar Molina', 'Pablo Ríos', 'Quim Santana',
-  'Raúl Cabrera', 'Sergio Moya', 'Tiago León', 'Unai Galindo',
-  'Víctor Soler', 'Xavi Moreno', 'Yeray Santos', 'Álex Peña',
+  'Michael', 'Raúl', 'Izan', 'María', 'Álvaro',
+  'Hugo', 'Ezequiel', 'Pablo', 'Francis',
 ];
+
+const numbers = [1, 2, 5, 6, 8, 9, 10, 12, 14];
 
 export const demoPlayers: Player[] = names.map((name, index) => ({
   id: `player-${String(index + 1).padStart(2, '0')}`,
   name,
-  number: index + 1,
+  number: numbers[index],
   active: true,
   order: index + 1,
   joinedAt: '2026-07-01',

@@ -9,21 +9,32 @@ export class GoogleSheetsDataService implements DataService {
 
   private async request<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
     if (!this.endpoint) throw new DataServiceError('Falta configurar la URL de Google Apps Script.', 'CONFIG');
-    let response: Response;
-    for (let attempt = 0; ; attempt += 1) {
+    let response: Response | undefined;
+    let serviceReached = false;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        response = await fetch(this.endpoint, {
+        const candidate = await fetch(this.endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action, ...payload }),
+          credentials: 'omit',
+          redirect: 'follow',
+          cache: 'no-store',
         });
-        break;
+        serviceReached = true;
+        if (candidate.ok) {
+          response = candidate;
+          break;
+        }
       } catch {
-        if (attempt >= 1) throw new DataServiceError('No hay conexión. El formulario sigue guardado en este dispositivo.', 'OFFLINE');
-        await new Promise((resolve) => window.setTimeout(resolve, 400));
+        // La redirección temporal de Apps Script puede fallar de forma puntual.
       }
+      if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 600 * (attempt + 1)));
     }
-    if (!response.ok) throw new DataServiceError('No se pudo contactar con el servicio de datos.', 'NETWORK');
+    if (!response) {
+      if (serviceReached) throw new DataServiceError('No se pudo contactar con el servicio de datos.', 'NETWORK');
+      throw new DataServiceError('No hay conexión. El formulario sigue guardado en este dispositivo.', 'OFFLINE');
+    }
     const result = (await response.json()) as ApiResponse<T>;
     if (!result.ok || result.data === undefined) throw new DataServiceError(result.error || 'Error de datos.', result.code);
     return result.data;

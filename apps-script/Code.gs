@@ -12,6 +12,8 @@ const SHEETS = {
   MATCH_MINUTES: 'Minutos partidos',
 };
 
+const PLAYER_ACCESS_ENABLED = false;
+
 const HEADERS = {
   Jugadores: ['id', 'nombre', 'dorsal', 'activo', 'orden', 'fecha_alta', 'pin_hash'],
   Mediciones: ['id', 'fecha', 'hora', 'fecha_hora', 'jugador_id', 'jugador_nombre', 'peso', 'fatiga', 'molestias', 'comentarios', 'sesion_id', 'creado_por', 'actualizado_en'],
@@ -119,6 +121,7 @@ function authenticate_(pin, requestedRole) {
     if (!configured) throw apiError_('El PIN del cuerpo técnico todavía no está configurado.', 'CONFIG');
     if (sha256_(cleanPin) !== configured) throw apiError_('El PIN del cuerpo técnico no es correcto.', 'INVALID_PIN');
   } else {
+    if (!PLAYER_ACCESS_ENABLED) throw apiError_('En este equipo el acceso está reservado al cuerpo técnico.', 'FORBIDDEN');
     const pinHash = sha256_(cleanPin);
     const row = rows_(SHEETS.PLAYERS).find(function(item) { return boolean_(item.activo) && String(item.pin_hash || '') === pinHash; });
     if (!row) throw apiError_('El PIN de jugador no es correcto.', 'INVALID_PIN');
@@ -293,6 +296,9 @@ function saveMeasurement_(input, session) {
     const previous = rowIndex > 0 ? values[rowIndex - 1] : [];
     const previousId = rowIndex > 0 ? String(previous[0]) : '';
     const previousCreated = rowIndex > 0 ? previous[3] : now;
+    if (rowIndex > 0 && session.role !== 'staff' && isOlderThan24Hours_(previousCreated, now)) {
+      throw apiError_('Han pasado más de 24 horas. Solo el cuerpo técnico puede modificar este registro.', 'EDIT_WINDOW_EXPIRED');
+    }
     const id = previousId || Utilities.getUuid();
     const comments = String(input.comments || '').replace(/[<>]/g, '').trim().slice(0, 500);
     const mergedWeight = hasWeight ? weight : numberOrNull_(previous[6]);
@@ -306,6 +312,12 @@ function saveMeasurement_(input, session) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function isOlderThan24Hours_(createdAt, now) {
+  const createdTime = createdAt instanceof Date ? createdAt.getTime() : new Date(createdAt).getTime();
+  if (!isFinite(createdTime)) return true;
+  return now.getTime() - createdTime > 24 * 60 * 60 * 1000;
 }
 
 function generatePlayerPins_() {

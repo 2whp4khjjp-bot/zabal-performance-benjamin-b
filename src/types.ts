@@ -65,6 +65,7 @@ export type DashboardFilter = 'all' | 'pending' | 'registered';
 export type MeasurementInput = {
   playerId: string;
   playerName: string;
+  date?: string;
   weight?: number;
   fatigue?: number;
   soreness?: number;

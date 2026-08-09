@@ -17,6 +17,10 @@ export default defineConfig(({ mode }) => {
         workbox: {
           navigateFallback: `${base}index.html`,
           globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+          globIgnores: [
+            '**/xlsx-*.js', '**/jspdf*.js', '**/html2canvas*.js', '**/purify*.js',
+            '**/index.es-*.js', '**/TechnicalPanel-*.js', '**/MatchesPanel-*.js',
+          ],
         },
       }),
     ],

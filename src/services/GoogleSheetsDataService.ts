@@ -1,4 +1,4 @@
-import type { AuthRole, AuthSession, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AuthRole, AuthSession, BootstrapData, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import type { DataService } from './DataService';
 import { DataServiceError } from './DataService';
 
@@ -46,6 +46,18 @@ export class GoogleSheetsDataService implements DataService {
 
   async logout(token: string) {
     await this.request<boolean>('logout', { token });
+  }
+
+  async getBootstrap(token: string) {
+    try {
+      return await this.request<BootstrapData>('getBootstrap', { token });
+    } catch (error) {
+      if (!(error instanceof DataServiceError) || error.code !== 'INVALID_ACTION') throw error;
+      const [players, measurements, session] = await Promise.all([
+        this.getPlayers(token), this.getMeasurements(token), this.getCurrentSession(token),
+      ]);
+      return { players, measurements, session };
+    }
   }
 
   getPlayers(token: string) {

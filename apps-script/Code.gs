@@ -75,6 +75,7 @@ function doPost(event) {
     if (action === 'authenticate') return json_({ ok: true, data: authenticate_(input.pin, input.role) });
     if (action === 'logout') return json_({ ok: true, data: logout_(input.token) });
     const session = requireSession_(input.token);
+    if (action === 'getBootstrap') return json_({ ok: true, data: getBootstrap_(session) });
     if (action === 'getPlayers') return json_({ ok: true, data: getPlayers_(session) });
     if (action === 'getMeasurements') return json_({ ok: true, data: getMeasurements_(session) });
     if (action === 'getCurrentSession') return json_({ ok: true, data: getCurrentSession_() });
@@ -168,6 +169,14 @@ function getMeasurements_(session) {
       createdBy: String(row.creado_por || ''), updatedAt: iso_(row.actualizado_en),
     };
   });
+}
+
+function getBootstrap_(session) {
+  return {
+    players: getPlayers_(session),
+    measurements: getMeasurements_(session),
+    session: getCurrentSession_(),
+  };
 }
 
 function getMatches_(session) {
@@ -288,9 +297,11 @@ function saveMeasurement_(input, session) {
     const playerColumn = headers.indexOf('jugador_id');
     const dateColumn = headers.indexOf('fecha');
     const today = dateKey_(new Date());
+    const requestedDate = session.role === 'staff' && input.date ? String(input.date) : today;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(requestedDate) || requestedDate > today) throw apiError_('La fecha de la medición no es válida.', 'VALIDATION');
     let rowIndex = -1;
     for (let index = 1; index < values.length; index += 1) {
-      if (String(values[index][playerColumn]) === player.id && dateKey_(values[index][dateColumn]) === today) { rowIndex = index + 1; break; }
+      if (String(values[index][playerColumn]) === player.id && dateKey_(values[index][dateColumn]) === requestedDate) { rowIndex = index + 1; break; }
     }
     const now = new Date();
     const previous = rowIndex > 0 ? values[rowIndex - 1] : [];
@@ -305,10 +316,10 @@ function saveMeasurement_(input, session) {
     const mergedFatigue = hasFatigue ? fatigue : numberOrNull_(previous[7]);
     const mergedSoreness = hasSoreness ? soreness : numberOrNull_(previous[8]);
     const createdBy = session.role === 'player' ? 'jugador:' + player.id : 'cuerpo-tecnico';
-    const row = [id, today, Utilities.formatDate(now, Session.getScriptTimeZone(), 'HH:mm'), previousCreated, player.id, player.name, blankIfUndefined_(mergedWeight), blankIfUndefined_(mergedFatigue), blankIfUndefined_(mergedSoreness), comments, String(input.sessionId || ''), createdBy, now];
+    const row = [id, requestedDate, Utilities.formatDate(now, Session.getScriptTimeZone(), 'HH:mm'), previousCreated, player.id, player.name, blankIfUndefined_(mergedWeight), blankIfUndefined_(mergedFatigue), blankIfUndefined_(mergedSoreness), comments, String(input.sessionId || ''), createdBy, now];
     if (rowIndex > 0) sheet.getRange(rowIndex, 1, 1, row.length).setValues([row]);
     else sheet.appendRow(row);
-    return { id: id, date: today, time: row[2], createdAt: iso_(previousCreated), playerId: player.id, playerName: player.name, weight: mergedWeight, fatigue: mergedFatigue, soreness: mergedSoreness, comments: comments, sessionId: String(input.sessionId || ''), createdBy: createdBy, updatedAt: now.toISOString() };
+    return { id: id, date: requestedDate, time: row[2], createdAt: iso_(previousCreated), playerId: player.id, playerName: player.name, weight: mergedWeight, fatigue: mergedFatigue, soreness: mergedSoreness, comments: comments, sessionId: String(input.sessionId || ''), createdBy: createdBy, updatedAt: now.toISOString() };
   } finally {
     lock.releaseLock();
   }

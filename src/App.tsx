@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import type { AuthRole, AuthSession, DashboardFilter, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from './types';
 import { dataService } from './services';
 import { clearAuthSession, readAuthSession, remainingSeconds, saveAuthSession } from './utils/session';
@@ -7,11 +7,12 @@ import { LoginScreen } from './components/LoginScreen';
 import { OfflineBanner } from './components/OfflineBanner';
 import { PlayerGrid } from './components/PlayerGrid';
 import { PlayerForm } from './components/PlayerForm';
-import { TechnicalPanel } from './components/TechnicalPanel';
 import { Toast } from './components/Toast';
 import { SiteFooter } from './components/SiteFooter';
-import { MatchesPanel } from './components/MatchesPanel';
 import './styles.css';
+
+const TechnicalPanel = lazy(() => import('./components/TechnicalPanel').then((module) => ({ default: module.TechnicalPanel })));
+const MatchesPanel = lazy(() => import('./components/MatchesPanel').then((module) => ({ default: module.MatchesPanel })));
 
 type View = 'players' | 'matches' | 'technical';
 
@@ -22,6 +23,7 @@ export default function App() {
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [trainingSession, setTrainingSession] = useState<TrainingSession | null>(null);
   const [matches, setMatches] = useState<MatchRecord[]>([]);
+  const [matchesLoaded, setMatchesLoaded] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [view, setView] = useState<View>('players');
   const [filter, setFilter] = useState<DashboardFilter>('all');
@@ -68,22 +70,25 @@ export default function App() {
   useEffect(() => {
     if (!auth) return;
     setLoading(true);
-    Promise.all([
-      dataService.getPlayers(auth.token),
-      dataService.getMeasurements(auth.token),
-      dataService.getCurrentSession(auth.token),
-      auth.role === 'staff' ? dataService.getMatches(auth.token) : Promise.resolve([]),
-    ]).then(([nextPlayers, nextMeasurements, nextSession, nextMatches]) => {
+    dataService.getBootstrap(auth.token).then(({ players: nextPlayers, measurements: nextMeasurements, session: nextSession }) => {
       setPlayers(nextPlayers);
       setMeasurements(nextMeasurements);
       setTrainingSession(nextSession);
-      setMatches(nextMatches);
       if (auth.role === 'player') setSelectedPlayer(nextPlayers[0] ?? null);
     }).catch((cause: Error) => {
       setError(cause.message || 'No se pudieron cargar los datos.');
       if (/sesión|session|unauthorized/i.test(cause.message)) void logout();
     }).finally(() => setLoading(false));
   }, [auth?.token]);
+
+  useEffect(() => {
+    if (!auth || auth.role !== 'staff' || view !== 'matches' || matchesLoaded) return;
+    setLoading(true);
+    dataService.getMatches(auth.token)
+      .then((nextMatches) => { setMatches(nextMatches); setMatchesLoaded(true); })
+      .catch((cause: Error) => setError(cause.message || 'No se pudieron cargar los partidos.'))
+      .finally(() => setLoading(false));
+  }, [auth?.token, auth?.role, view, matchesLoaded]);
 
   useEffect(() => {
     if (!toast) return;
@@ -162,8 +167,10 @@ export default function App() {
       {loading && !players.length ? <div className="loading-screen"><span className="loader" /><p>Preparando la sesión…</p></div> : null}
       {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} />}
       {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} session={trainingSession} saving={saving} onSave={saveMeasurement} onBack={() => setSelectedPlayer(null)} role={auth.role} />}
-      {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} />}
-      {!loading && auth.role === 'staff' && view === 'technical' && <TechnicalPanel players={players} measurements={measurements} />}
+      <Suspense fallback={<div className="loading-screen"><span className="loader" /><p>Cargando módulo…</p></div>}>
+        {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} />}
+        {!loading && auth.role === 'staff' && view === 'technical' && <TechnicalPanel players={players} measurements={measurements} />}
+      </Suspense>
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
       <SiteFooter />
     </div>

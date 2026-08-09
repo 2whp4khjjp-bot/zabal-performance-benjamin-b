@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ArrowLeft, ChevronDown, ChevronUp, History, Save, Scale, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowLeft, CalendarDays, ChevronDown, ChevronUp, History, Save, Scale, TrendingDown, TrendingUp } from 'lucide-react';
 import type { AuthRole, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import { formatDate, todayKey } from '../utils/date';
 import { average, parseWeight, recentForPlayer, weightChange } from '../utils/measurements';
@@ -17,11 +17,11 @@ type FormProps = {
 
 type Draft = { weight: string; fatigue: number | null; soreness: number | null; comments: string };
 
-const draftKey = (playerId: string) => `zabal-draft-${todayKey()}-${playerId}`;
+const draftKey = (playerId: string, date: string) => `zabal-draft-${date}-${playerId}`;
 
-const readDraft = (playerId: string, existing?: Measurement): Draft => {
+const readDraft = (playerId: string, date: string, existing?: Measurement): Draft => {
   try {
-    const stored = localStorage.getItem(draftKey(playerId));
+    const stored = localStorage.getItem(draftKey(playerId, date));
     if (stored) return JSON.parse(stored) as Draft;
   } catch { /* El formulario sigue disponible con valores seguros. */ }
   return {
@@ -53,21 +53,22 @@ function ScorePicker({ label, value, onChange }: { label: string; value: number 
 }
 
 export function PlayerForm({ player, measurements, session, saving, onSave, onBack, role }: FormProps) {
-  const existing = measurements.find((item) => item.playerId === player.id && item.date === todayKey());
-  const [draft, setDraft] = useState<Draft>(() => readDraft(player.id, existing));
+  const [measurementDate, setMeasurementDate] = useState(todayKey());
+  const existing = measurements.find((item) => item.playerId === player.id && item.date === measurementDate);
+  const [draft, setDraft] = useState<Draft>(() => readDraft(player.id, todayKey(), existing));
   const [errors, setErrors] = useState<string[]>([]);
   const [showEvolution, setShowEvolution] = useState(false);
   const history = useMemo(() => recentForPlayer(measurements, player.id), [measurements, player.id]);
 
   useEffect(() => {
-    setDraft(readDraft(player.id, existing));
+    setDraft(readDraft(player.id, measurementDate, existing));
     setErrors([]);
     setShowEvolution(false);
-  }, [player.id]);
+  }, [player.id, measurementDate]);
 
   useEffect(() => {
-    localStorage.setItem(draftKey(player.id), JSON.stringify(draft));
-  }, [draft, player.id]);
+    localStorage.setItem(draftKey(player.id, measurementDate), JSON.stringify(draft));
+  }, [draft, player.id, measurementDate]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -81,6 +82,7 @@ export function PlayerForm({ player, measurements, session, saving, onSave, onBa
     }
     setErrors([]);
     const saved = await onSave({
+      date: role === 'staff' ? measurementDate : undefined,
       playerId: player.id,
       playerName: player.name,
       weight,
@@ -89,7 +91,7 @@ export function PlayerForm({ player, measurements, session, saving, onSave, onBa
       comments: draft.comments,
       sessionId: session.id,
     });
-    if (saved) localStorage.removeItem(draftKey(player.id));
+    if (saved) localStorage.removeItem(draftKey(player.id, measurementDate));
   };
 
   const change = weightChange(history);
@@ -99,11 +101,16 @@ export function PlayerForm({ player, measurements, session, saving, onSave, onBa
       {role === 'staff' && <button className="back-link" onClick={onBack}><ArrowLeft size={19} /> Volver al listado</button>}
       <div className="form-heading">
         <div className="player-avatar">{player.number ?? '—'}</div>
-        <div><p className="eyebrow eyebrow--dark">Control preentrenamiento · {formatDate(todayKey())}</p><h1>{player.name}</h1>{existing && <span className="edit-badge"><History size={14} /> Editando la medición de hoy</span>}</div>
+        <div><p className="eyebrow eyebrow--dark">Control preentrenamiento · {formatDate(measurementDate)}</p><h1>{player.name}</h1>{existing && <span className="edit-badge"><History size={14} /> Editando una medición existente</span>}</div>
       </div>
 
       <div className="form-layout">
         <form className="measurement-form" onSubmit={submit} noValidate>
+          {role === 'staff' && <section className="form-section historical-date-field">
+            <label htmlFor="measurement-date"><CalendarDays size={20} /> Fecha de la medición</label>
+            <input id="measurement-date" type="date" max={todayKey()} value={measurementDate} onChange={(event) => setMeasurementDate(event.target.value || todayKey())} />
+            <small>Selecciona otro día para añadir datos atrasados o corregir una medición ya guardada.</small>
+          </section>}
           <section className="form-section">
             <div className="weight-field">
               <label htmlFor="weight"><Scale size={20} /> Peso <span>kg</span></label>

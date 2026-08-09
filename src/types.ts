@@ -63,6 +63,7 @@ export type AuthSession = {
 export type DashboardFilter = 'all' | 'pending' | 'registered';
 
 export type MeasurementInput = {
+  date?: string;
   playerId: string;
   playerName: string;
   weight?: number;
@@ -70,6 +71,12 @@ export type MeasurementInput = {
   soreness?: number;
   comments: string;
   sessionId: string;
+};
+
+export type BootstrapData = {
+  players: Player[];
+  measurements: Measurement[];
+  session: TrainingSession;
 };
 
 export type ReportKind = 'daily' | 'weekly' | 'player' | 'alerts';

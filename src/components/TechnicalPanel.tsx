@@ -130,15 +130,15 @@ export function TechnicalPanel({ players, measurements }: { players: Player[]; m
           {selectedPlayer ? <div className="individual-insight"><h3>{selectedPlayer.name}</h3><div className="insight-stats"><span>Último peso <strong>{selectedHistory.map((item) => item.weight).filter((value) => value !== undefined).at(-1) ?? '—'} kg</strong></span><span>Fatiga media <strong>{average(selectedHistory.map((item) => item.fatigue)).toFixed(1)}</strong></span><span>Molestias media <strong>{average(selectedHistory.map((item) => item.soreness)).toFixed(1)}</strong></span></div><Sparkline values={selectedHistory.map((item) => item.weight).filter((value): value is number => value !== undefined)} label="Evolución individual del peso" /></div> : <p className="muted-copy">Selecciona un jugador para ver solo sus últimos controles.</p>}
         </article>
         <article className="panel-card weekly-card">
-          <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Comparativa semanal</p><h2>Actividad por jugador</h2></div><button className="button button--secondary" onClick={() => void pdf('weekly')}><FileDown size={17} /> PDF</button></div>
+          <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Informe por jugador</p><h2>Tendencias semanales y mensuales</h2></div><button className="button button--secondary" onClick={() => void pdf('weekly')}><FileDown size={17} /> PDF</button></div>
           <div className="weekly-bars">{players.slice(0, 8).map((player) => { const count = measurements.filter((item) => item.playerId === player.id).slice(-7).length; return <div key={player.id}><span>{player.name.split(' ')[0]}</span><div><i style={{ width: `${(count / maxWeekly) * 100}%` }} /></div><strong>{count}</strong></div>; })}</div>
         </article>
       </section>
 
       <section className="report-strip">
-        <div><CalendarDays /><span><strong>Informes listos para imprimir</strong><small>Formato A4, identidad Zabal y tablas legibles.</small></span></div>
+        <div><CalendarDays /><span><strong>Informes listos para imprimir</strong><small>Dos jugadores por página A4 con sus gráficas semanales y mensuales.</small></span></div>
         <button className="button button--secondary" onClick={() => void pdf('alerts')}><FileDown size={18} /> Informe de alertas</button>
-        <button className="button button--secondary" onClick={() => void pdf('weekly')}><FileDown size={18} /> Informe semanal</button>
+        <button className="button button--secondary" onClick={() => void pdf('weekly')}><FileDown size={18} /> Tendencias por jugador</button>
       </section>
     </main>
   );

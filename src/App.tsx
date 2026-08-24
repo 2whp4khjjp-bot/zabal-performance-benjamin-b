@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import type { AuthRole, AuthSession, DashboardFilter, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from './types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, DashboardFilter, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from './types';
 import { dataService } from './services';
 import { clearAuthSession, readAuthSession, remainingSeconds, saveAuthSession } from './utils/session';
 import { AppHeader } from './components/AppHeader';
@@ -13,8 +13,9 @@ import './styles.css';
 
 const TechnicalPanel = lazy(() => import('./components/TechnicalPanel').then((module) => ({ default: module.TechnicalPanel })));
 const MatchesPanel = lazy(() => import('./components/MatchesPanel').then((module) => ({ default: module.MatchesPanel })));
+const AttendancePanel = lazy(() => import('./components/AttendancePanel').then((module) => ({ default: module.AttendancePanel })));
 
-type View = 'players' | 'matches' | 'technical';
+type View = 'players' | 'matches' | 'attendance' | 'technical';
 
 export default function App() {
   const [auth, setAuth] = useState<AuthSession | null>(() => readAuthSession());
@@ -24,6 +25,8 @@ export default function App() {
   const [trainingSession, setTrainingSession] = useState<TrainingSession | null>(null);
   const [matches, setMatches] = useState<MatchRecord[]>([]);
   const [matchesLoaded, setMatchesLoaded] = useState(false);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [attendanceLoaded, setAttendanceLoaded] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [view, setView] = useState<View>('players');
   const [filter, setFilter] = useState<DashboardFilter>('all');
@@ -42,6 +45,8 @@ export default function App() {
     setMeasurements([]);
     setTrainingSession(null);
     setMatches([]);
+    setAttendance([]);
+    setAttendanceLoaded(false);
     setSelectedPlayer(null);
     setView('players');
     setRemaining(0);
@@ -89,6 +94,15 @@ export default function App() {
       .catch((cause: Error) => setError(cause.message || 'No se pudieron cargar los partidos.'))
       .finally(() => setLoading(false));
   }, [auth?.token, auth?.role, view, matchesLoaded]);
+
+  useEffect(() => {
+    if (!auth || auth.role !== 'staff' || view !== 'attendance' || attendanceLoaded) return;
+    setLoading(true);
+    dataService.getAttendance(auth.token)
+      .then((records) => { setAttendance(records); setAttendanceLoaded(true); })
+      .catch((cause: Error) => setError(cause.message || 'No se pudo cargar la asistencia.'))
+      .finally(() => setLoading(false));
+  }, [auth?.token, auth?.role, view, attendanceLoaded]);
 
   useEffect(() => {
     if (!toast) return;
@@ -151,6 +165,23 @@ export default function App() {
     }
   };
 
+  const saveAttendance = async (input: AttendanceInput) => {
+    if (!auth || auth.role !== 'staff') return false;
+    setSaving(true);
+    setError('');
+    try {
+      const saved = await dataService.saveAttendance(auth.token, input);
+      setAttendance((current) => [...current.filter((item) => item.date !== input.date), ...saved]);
+      setToast('Asistencia guardada correctamente');
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo guardar la asistencia.');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (!auth) return (
     <div className="login-shell">
       <OfflineBanner offline={offline} />
@@ -169,6 +200,7 @@ export default function App() {
       {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} session={trainingSession} saving={saving} onSave={saveMeasurement} onBack={() => setSelectedPlayer(null)} role={auth.role} />}
       <Suspense fallback={<div className="loading-screen"><span className="loader" /><p>Cargando módulo…</p></div>}>
         {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} />}
+        {!loading && auth.role === 'staff' && view === 'attendance' && <AttendancePanel players={players} attendance={attendance} saving={saving} onSave={saveAttendance} />}
         {!loading && auth.role === 'staff' && view === 'technical' && <TechnicalPanel players={players} measurements={measurements} />}
       </Suspense>
       {toast && <Toast message={toast} onClose={() => setToast('')} />}

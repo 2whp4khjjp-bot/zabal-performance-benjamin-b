@@ -38,4 +38,21 @@ describe('servicio local', () => {
 
     await expect(service.authenticate('1001', 'player')).rejects.toThrow('cuerpo técnico');
   });
+  it('guarda y modifica la asistencia manual de un día anterior', async () => {
+    const service = new LocalDataService();
+    const staff = await service.authenticate('2026', 'staff');
+    const players = await service.getPlayers(staff.token);
+    const date = '2026-08-20';
+    await service.saveAttendance(staff.token, {
+      date,
+      entries: players.map((player) => ({ playerId: player.id, playerName: player.name, status: 'present', comments: '' })),
+    });
+    const updated = await service.saveAttendance(staff.token, {
+      date,
+      entries: players.map((player, index) => ({ playerId: player.id, playerName: player.name, status: index === 0 ? 'absent' : 'present', comments: index === 0 ? 'Avisado' : '' })),
+    });
+    expect(updated[0].status).toBe('absent');
+    expect(updated[0].comments).toBe('Avisado');
+    expect((await service.getAttendance(staff.token)).filter((item) => item.date === date)).toHaveLength(players.length);
+  });
 });

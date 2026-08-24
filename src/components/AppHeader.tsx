@@ -1,4 +1,4 @@
-import { BarChart3, Clock3, LogOut, ShieldCheck, Trophy, Users } from 'lucide-react';
+import { BarChart3, Clock3, LogOut, ShieldCheck, Trophy, UserCheck, Users } from 'lucide-react';
 import { appConfig } from '../config';
 import type { AuthRole } from '../types';
 import { formatRemaining } from '../utils/session';
@@ -6,8 +6,8 @@ import { Brand } from './Brand';
 
 type HeaderProps = {
   remaining: number;
-  view: 'players' | 'matches' | 'technical';
-  onViewChange: (view: 'players' | 'matches' | 'technical') => void;
+  view: 'players' | 'matches' | 'attendance' | 'technical';
+  onViewChange: (view: 'players' | 'matches' | 'attendance' | 'technical') => void;
   onLogout: () => void;
   role: AuthRole;
   playerName?: string;
@@ -23,6 +23,9 @@ export function AppHeader({ remaining, view, onViewChange, onLogout, role, playe
         </button>
         <button aria-label="Partidos" className={view === 'matches' ? 'active' : ''} onClick={() => onViewChange('matches')}>
           <Trophy size={18} /> <span>Partidos</span>
+        </button>
+        <button aria-label="Asistencia" className={view === 'attendance' ? 'active' : ''} onClick={() => onViewChange('attendance')}>
+          <UserCheck size={18} /> <span>Asistencia</span>
         </button>
         <button aria-label="Informes" className={view === 'technical' ? 'active' : ''} onClick={() => onViewChange('technical')}>
           <BarChart3 size={18} /> <span>Panel técnico</span>

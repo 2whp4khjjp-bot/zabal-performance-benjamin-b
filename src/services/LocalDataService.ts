@@ -1,6 +1,6 @@
 import { appConfig, environment } from '../config';
 import { createDemoMeasurements, createTodaySession, demoPlayers } from '../data/demo';
-import type { AuthRole, AuthSession, BootstrapData, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BootstrapData, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import { todayKey } from '../utils/date';
 import { sanitizeComment } from '../utils/measurements';
 import type { DataService } from './DataService';
@@ -9,6 +9,7 @@ import { DataServiceError } from './DataService';
 const MEASUREMENTS_KEY = 'zabal-demo-measurements-v1';
 const PLAYERS_KEY = 'zabal-demo-players-v1';
 const MATCHES_KEY = 'zabal-demo-matches-v1';
+const ATTENDANCE_KEY = 'zabal-benjamin-attendance-v1';
 
 const sha256 = async (value: string) => {
   const bytes = new TextEncoder().encode(value);
@@ -127,6 +128,38 @@ export class LocalDataService implements DataService {
     else items.push(measurement);
     localStorage.setItem(MEASUREMENTS_KEY, JSON.stringify(items));
     return measurement;
+  }
+
+  async getAttendance(token: string): Promise<AttendanceRecord[]> {
+    const auth = this.requireSession(token);
+    if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede consultar la asistencia.', 'FORBIDDEN');
+    return readJson<AttendanceRecord[]>(ATTENDANCE_KEY, []).sort((a, b) => `${b.date}${b.updatedAt}`.localeCompare(`${a.date}${a.updatedAt}`));
+  }
+
+  async saveAttendance(token: string, input: AttendanceInput): Promise<AttendanceRecord[]> {
+    const auth = this.requireSession(token);
+    if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede guardar la asistencia.', 'FORBIDDEN');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || input.date > todayKey()) throw new DataServiceError('La fecha de asistencia no es válida.', 'VALIDATION');
+    const players = readJson(PLAYERS_KEY, demoPlayers).filter((player) => player.active);
+    const playersById = new Map(players.map((player) => [player.id, player]));
+    const seen = new Set<string>();
+    const now = new Date().toISOString();
+    const current = readJson<AttendanceRecord[]>(ATTENDANCE_KEY, []);
+    const previousByPlayer = new Map(current.filter((item) => item.date === input.date).map((item) => [item.playerId, item]));
+    const saved = input.entries.map((entry) => {
+      const player = playersById.get(entry.playerId);
+      if (!player || player.name !== entry.playerName || seen.has(entry.playerId)) throw new DataServiceError('Hay un jugador no válido o repetido.', 'INVALID_PLAYER');
+      if (!['pending', 'present', 'absent'].includes(entry.status)) throw new DataServiceError(`Revisa la asistencia de ${entry.playerName}.`, 'VALIDATION');
+      seen.add(entry.playerId);
+      const previous = previousByPlayer.get(entry.playerId);
+      return {
+        id: previous?.id || crypto.randomUUID(), date: input.date, playerId: player.id, playerName: player.name,
+        status: entry.status, comments: entry.comments.replace(/[<>]/g, '').trim().slice(0, 250),
+        createdAt: previous?.createdAt || now, updatedAt: now, createdBy: 'cuerpo-tecnico',
+      } as AttendanceRecord;
+    });
+    localStorage.setItem(ATTENDANCE_KEY, JSON.stringify([...current.filter((item) => item.date !== input.date), ...saved]));
+    return saved;
   }
 
   async getMatches(token: string): Promise<MatchRecord[]> {

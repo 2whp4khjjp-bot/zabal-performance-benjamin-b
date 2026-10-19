@@ -1,4 +1,4 @@
-import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BootstrapData, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BootstrapData, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, PlayerInput, TrainingSession } from '../types';
 import type { DataService } from './DataService';
 import { DataServiceError } from './DataService';
 
@@ -62,6 +62,14 @@ export class GoogleSheetsDataService implements DataService {
 
   getPlayers(token: string) {
     return this.request<Player[]>('getPlayers', { token });
+  }
+
+  addPlayer(token: string, input: PlayerInput) {
+    return this.request<Player>('addPlayer', { token, player: input });
+  }
+
+  removePlayer(token: string, playerId: string) {
+    return this.request<boolean>('removePlayer', { token, playerId });
   }
 
   getMeasurements(token: string) {

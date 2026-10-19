@@ -25,18 +25,29 @@ describe('servicio local', () => {
     const service = new LocalDataService();
     await expect(service.authenticate('1001', 'player')).rejects.toThrow('cuerpo técnico');
   });
-  it('guarda minutos de partido solo para el cuerpo técnico', async () => {
+  it('guarda minutos, titularidades y goles solo para el cuerpo técnico', async () => {
     const service = new LocalDataService();
     const staff = await service.authenticate('2026', 'staff');
     const players = await service.getPlayers(staff.token);
     const saved = await service.saveMatch(staff.token, {
       date: '2026-08-09', type: 'official', opponent: 'UD Los Barrios', durationMinutes: 90,
-      minutes: [{ playerId: players[0].id, playerName: players[0].name, minutes: 74 }],
+      minutes: [{ playerId: players[0].id, playerName: players[0].name, minutes: 74, starter: true, goals: 2 }],
     });
     expect(saved.durationMinutes).toBe(90);
-    expect((await service.getMatches(staff.token))[0].minutes[0].minutes).toBe(74);
+    const entry = (await service.getMatches(staff.token))[0].minutes[0];
+    expect(entry).toMatchObject({ minutes: 74, starter: true, goals: 2 });
 
     await expect(service.authenticate('1001', 'player')).rejects.toThrow('cuerpo técnico');
+  });
+  it('añade y da de baja jugadores sin perder el registro', async () => {
+    const service = new LocalDataService();
+    const staff = await service.authenticate('2026', 'staff');
+    const originalCount = (await service.getPlayers(staff.token)).length;
+    const player = await service.addPlayer(staff.token, { name: 'Nuevo Jugador', number: 25 });
+    expect(await service.getPlayers(staff.token)).toHaveLength(originalCount + 1);
+    await service.removePlayer(staff.token, player.id);
+    expect(await service.getPlayers(staff.token)).toHaveLength(originalCount);
+    await expect(service.addPlayer(staff.token, { name: 'Otro Jugador', number: 1 })).rejects.toThrow('dorsal');
   });
   it('guarda y modifica la asistencia manual de un día anterior', async () => {
     const service = new LocalDataService();

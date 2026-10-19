@@ -1,6 +1,6 @@
 import { appConfig, environment } from '../config';
 import { createDemoMeasurements, createTodaySession, demoPlayers } from '../data/demo';
-import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BootstrapData, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BootstrapData, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, PlayerInput, TrainingSession } from '../types';
 import { todayKey } from '../utils/date';
 import { sanitizeComment } from '../utils/measurements';
 import type { DataService } from './DataService';
@@ -69,6 +69,33 @@ export class LocalDataService implements DataService {
     const session = this.requireSession(token);
     const players = readJson(PLAYERS_KEY, demoPlayers).filter((player) => player.active).sort((a, b) => a.order - b.order);
     return session.role === 'player' ? players.filter((player) => player.id === session.playerId) : players;
+  }
+
+  async addPlayer(token: string, input: PlayerInput): Promise<Player> {
+    const auth = this.requireSession(token);
+    if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede modificar la plantilla.', 'FORBIDDEN');
+    const players = readJson(PLAYERS_KEY, demoPlayers);
+    const name = input.name.replace(/[<>]/g, '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    const number = input.number === undefined ? undefined : Number(input.number);
+    if (name.length < 2) throw new DataServiceError('Introduce el nombre del jugador.', 'VALIDATION');
+    if (number !== undefined && (!Number.isInteger(number) || number < 1 || number > 99)) throw new DataServiceError('El dorsal debe estar entre 1 y 99.', 'VALIDATION');
+    if (players.some((player) => player.active && player.name.toLocaleLowerCase('es') === name.toLocaleLowerCase('es'))) throw new DataServiceError('Ya hay un jugador activo con ese nombre.', 'DUPLICATE_PLAYER');
+    if (number !== undefined && players.some((player) => player.active && player.number === number)) throw new DataServiceError('Ese dorsal ya está asignado.', 'DUPLICATE_NUMBER');
+    const next: Player = { id: `player-${crypto.randomUUID()}`, name, number, active: true, order: Math.max(0, ...players.map((player) => player.order)) + 1, joinedAt: todayKey() };
+    players.push(next);
+    localStorage.setItem(PLAYERS_KEY, JSON.stringify(players));
+    return next;
+  }
+
+  async removePlayer(token: string, playerId: string): Promise<boolean> {
+    const auth = this.requireSession(token);
+    if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede modificar la plantilla.', 'FORBIDDEN');
+    const players = readJson(PLAYERS_KEY, demoPlayers);
+    const index = players.findIndex((player) => player.id === playerId && player.active);
+    if (index < 0) throw new DataServiceError('El jugador ya no pertenece a la plantilla activa.', 'INVALID_PLAYER');
+    players[index] = { ...players[index], active: false };
+    localStorage.setItem(PLAYERS_KEY, JSON.stringify(players));
+    return true;
   }
 
   async getMeasurements(token: string): Promise<Measurement[]> {
@@ -186,10 +213,13 @@ export class LocalDataService implements DataService {
       if (!Number.isInteger(entry.minutes) || entry.minutes < 0 || entry.minutes > input.durationMinutes) {
         throw new DataServiceError(`Los minutos de ${entry.playerName} no son válidos.`, 'VALIDATION');
       }
+      const goals = Number(entry.goals || 0);
+      if (!Number.isInteger(goals) || goals < 0 || goals > 20) throw new DataServiceError(`Los goles de ${entry.playerName} no son válidos.`, 'VALIDATION');
       seen.add(entry.playerId);
-      return { playerId: player.id, playerName: player.name, minutes: entry.minutes };
+      return { playerId: player.id, playerName: player.name, minutes: entry.minutes, starter: Boolean(entry.starter), goals };
     });
     if (!minutes.length) throw new DataServiceError('Introduce los minutos de al menos un jugador.', 'VALIDATION');
+    if (minutes.filter((entry) => entry.starter).length > appConfig.maxStarters) throw new DataServiceError(`No puedes marcar más de ${appConfig.maxStarters} titulares.`, 'VALIDATION');
     const now = new Date().toISOString();
     const match: MatchRecord = {
       id: crypto.randomUUID(), date: input.date, type: input.type, opponent,

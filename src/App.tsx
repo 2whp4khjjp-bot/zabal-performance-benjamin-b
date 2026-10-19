@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, DashboardFilter, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from './types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, DashboardFilter, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, PlayerInput, TrainingSession } from './types';
 import { dataService } from './services';
 import { clearAuthSession, readAuthSession, remainingSeconds, saveAuthSession } from './utils/session';
 import { AppHeader } from './components/AppHeader';
@@ -165,6 +165,41 @@ export default function App() {
     }
   };
 
+  const addPlayer = async (input: PlayerInput) => {
+    if (!auth || auth.role !== 'staff') return false;
+    setSaving(true);
+    setError('');
+    try {
+      const saved = await dataService.addPlayer(auth.token, input);
+      setPlayers((current) => [...current, saved].sort((a, b) => a.order - b.order));
+      setToast(`${saved.name} añadido a la plantilla`);
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo añadir el jugador.');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removePlayer = async (player: Player) => {
+    if (!auth || auth.role !== 'staff') return false;
+    setSaving(true);
+    setError('');
+    try {
+      await dataService.removePlayer(auth.token, player.id);
+      setPlayers((current) => current.filter((item) => item.id !== player.id));
+      setSelectedPlayer((current) => current?.id === player.id ? null : current);
+      setToast(`${player.name} eliminado de la plantilla activa`);
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo eliminar el jugador.');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveAttendance = async (input: AttendanceInput) => {
     if (!auth || auth.role !== 'staff') return false;
     setSaving(true);
@@ -196,7 +231,7 @@ export default function App() {
       <AppHeader remaining={remaining} view={view} role={auth.role} playerName={auth.playerName} onViewChange={(next) => { setView(next); setSelectedPlayer(null); }} onLogout={() => void logout()} />
       {error && <div className="global-error" role="alert"><span>{error}</span><button onClick={() => setError('')}>Cerrar</button></div>}
       {loading && !players.length ? <div className="loading-screen"><span className="loader" /><p>Preparando la sesión…</p></div> : null}
-      {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} />}
+      {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} saving={saving} onAddPlayer={addPlayer} onRemovePlayer={removePlayer} />}
       {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} session={trainingSession} saving={saving} onSave={saveMeasurement} onBack={() => setSelectedPlayer(null)} role={auth.role} />}
       <Suspense fallback={<div className="loading-screen"><span className="loader" /><p>Cargando módulo…</p></div>}>
         {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} />}

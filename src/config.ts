@@ -11,6 +11,7 @@ export const appConfig: AppConfig = {
   },
   colors: { navy: '#16365f', yellow: '#f6ca3b' },
   logoSrc: `${import.meta.env.BASE_URL}assets/logo-placeholder.svg`,
+  maxStarters: Number(import.meta.env.VITE_MAX_STARTERS || 7),
 };
 
 export const environment = {

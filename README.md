@@ -14,6 +14,8 @@ La identidad visual toma como referencia general la web del Atlético Zabal Line
 - Estados pendiente, parcial, normal, moderado y alerta con color, texto e icono.
 - Guardado acumulativo por fases: peso/molestias antes y fatiga después, sin borrar campos ya registrados.
 - Borrador local por jugador para no perder el formulario si se corta la conexión.
+- Actas de partido con minutos, titularidades y goles por jugador.
+- Gestión de la plantilla desde la aplicación, con altas y bajas que conservan el historial.
 - Evolución individual con las últimas diez mediciones.
 - Panel técnico con resumen, alertas, filtros, ordenación y comparativa semanal.
 - Exportación a CSV y Excel.
@@ -102,10 +104,10 @@ Las pestañas creadas son `Jugadores`, `Mediciones`, `Sesiones`, `Configuración
 
 ### Añadir o desactivar jugadores
 
-- Añadir: cree una fila en `Jugadores` con un `id` único, nombre, dorsal opcional, `activo=TRUE`, orden y fecha de alta.
+- Añadir: use **Gestionar plantilla** en la pantalla de jugadores. También puede crear una fila en `Jugadores` con un `id` único, nombre, dorsal opcional, `activo=TRUE`, orden y fecha de alta.
 - PIN editable: cambie el código en `Códigos jugadores`, manteniendo entre 4 y 12 dígitos, y pulse **Aplicar PINs editados**. El sistema impide códigos repetidos o jugadores sin PIN.
 - Regenerar todos: **Generar PINs de jugadores** crea códigos nuevos para toda la plantilla e invalida los anteriores.
-- Desactivar: cambie `activo` a `FALSE`. No borre al jugador; así se conserva su historial.
+- Desactivar: use **Eliminar** dentro de **Gestionar plantilla** o cambie `activo` a `FALSE` en la hoja. La aplicación conserva el historial del jugador.
 - Ordenar: cambie la columna `orden`.
 
 ## Informes y exportaciones
@@ -178,7 +180,6 @@ Antes de usar datos reales, revise el tratamiento de datos personales, el acceso
 - Autenticación individual para técnicos y registro de auditoría.
 - Cola offline cifrada y sincronización en segundo plano para producción.
 - Supabase/PostgreSQL, políticas por equipo y copias automáticas.
-- Gestión de plantilla desde el panel técnico.
 - Comparativas de microciclos, carga externa e integración con GPS.
 - Notificaciones privadas de alertas y consentimiento/retención configurables.
 

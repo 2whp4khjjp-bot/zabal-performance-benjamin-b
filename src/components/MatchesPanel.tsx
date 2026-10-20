@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays, Clock3, Goal, History, Pencil, Save, Star, Trophy, UsersRound } from 'lucide-react';
+import { CalendarDays, Clock3, Goal, History, Pencil, Save, Star, Trash2, Trophy, UsersRound } from 'lucide-react';
 import type { MatchInput, MatchRecord, MatchType, Player } from '../types';
 import { todayKey } from '../utils/date';
 import { appConfig } from '../config';
+import { sortMatchStats, type MatchSort } from '../utils/matchSort';
 
 const durationOptions = [40, 50, 60, 70, 80, 90] as const;
 
@@ -12,12 +13,15 @@ type Props = {
   saving: boolean;
   onSave: (input: MatchInput) => Promise<boolean>;
   onUpdate: (match: MatchRecord, input: MatchInput) => Promise<boolean>;
+  onDelete: (match: MatchRecord) => Promise<boolean>;
 };
 
 const typeLabel = (type: MatchType) => type === 'official' ? 'Oficial' : 'Amistoso';
 
-export function MatchesPanel({ players, matches, saving, onSave, onUpdate }: Props) {
+export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDelete }: Props) {
   const [mode, setMode] = useState<'new' | 'history'>('new');
+  const [sortBy, setSortBy] = useState<MatchSort>('minutes');
+  const [formSortBy, setFormSortBy] = useState<MatchSort>('number');
   const [editing, setEditing] = useState<MatchRecord | null>(null);
   const [date, setDate] = useState(todayKey());
   const [type, setType] = useState<MatchType>('official');
@@ -67,6 +71,12 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate }: Pro
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const confirmDelete = (match: MatchRecord) => {
+    if (window.confirm(`¿Eliminar el partido contra ${match.opponent} del ${match.date}? Dejará de contar en el historial y los acumulados.`)) {
+      void onDelete(match);
+    }
+  };
+
   const duration = durationOption === 'custom' ? Number(customDuration) : Number(durationOption);
   const enteredValues = Object.values(minutesByPlayer).filter((value) => value !== '');
   const enteredCount = formPlayers.filter((player) => (minutesByPlayer[player.id] ?? '') !== '' || Boolean(starterByPlayer[player.id]) || Number(goalsByPlayer[player.id] || 0) > 0).length;
@@ -77,7 +87,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate }: Pro
     const byPlayer = new Map<string, { player: Player; appearances: number; starts: number; minutes: number; goals: number }>();
     players.forEach((player) => byPlayer.set(player.id, { player, appearances: 0, starts: 0, minutes: 0, goals: 0 }));
     matches.forEach((match) => match.minutes.forEach((entry) => {
-      if (!byPlayer.has(entry.playerId)) byPlayer.set(entry.playerId, { player: { id: entry.playerId, name: entry.playerName, active: false, order: Number.MAX_SAFE_INTEGER, joinedAt: '' }, appearances: 0, starts: 0, minutes: 0, goals: 0 });
+      if (!byPlayer.has(entry.playerId)) byPlayer.set(entry.playerId, { player: { id: entry.playerId, name: entry.playerName, number: entry.number, active: false, order: Number.MAX_SAFE_INTEGER, joinedAt: '' }, appearances: 0, starts: 0, minutes: 0, goals: 0 });
       const total = byPlayer.get(entry.playerId);
       if (!total) return;
       total.minutes += entry.minutes;
@@ -85,8 +95,8 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate }: Pro
       if (entry.starter) total.starts += 1;
       if (entry.minutes > 0 || entry.starter || (entry.goals ?? 0) > 0) total.appearances += 1;
     }));
-    return [...byPlayer.values()].filter((item) => item.appearances || item.starts || item.minutes || item.goals).sort((a, b) => b.minutes - a.minutes || a.player.order - b.player.order);
-  }, [matches, players]);
+    return sortMatchStats([...byPlayer.values()].filter((item) => item.appearances || item.starts || item.minutes || item.goals).map((item) => ({ ...item, number: item.player.number, name: item.player.name })), sortBy);
+  }, [matches, players, sortBy]);
 
   const validate = () => {
     const next: string[] = [];
@@ -156,8 +166,9 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate }: Pro
             <div><p className="eyebrow eyebrow--dark">Participación</p><h2>Acta por jugador</h2><p>Deja los minutos vacíos si no participó.</p></div>
             <span className="duration-badge"><Clock3 size={16} /> Máximo {Number.isFinite(duration) ? duration : '—'}</span>
           </div>
+          <div className="match-sort-control match-sort-control--form"><label htmlFor="match-form-sort">Ordenar jugadores por</label><select id="match-form-sort" value={formSortBy} onChange={(event) => setFormSortBy(event.target.value as MatchSort)}><option value="number">Dorsal</option><option value="minutes">Minutos</option><option value="goals">Goles</option></select></div>
           <div className="match-player-list">
-            {formPlayers.map((player) => <label className="match-player-row" key={player.id}>
+            {sortMatchStats(formPlayers.map((player) => ({ ...player, number: editing?.minutes.find((entry) => entry.playerId === player.id)?.number ?? player.number, minutes: Number(minutesByPlayer[player.id] || 0), goals: Number(goalsByPlayer[player.id] || 0) })), formSortBy).map((player) => <label className="match-player-row" key={player.id}>
               <span className="match-player-number">{editing?.minutes.find((entry) => entry.playerId === player.id)?.number ?? (editing?.minutes.some((entry) => entry.playerId === player.id) ? '—' : player.number ?? '—')}</span>
               <span className="match-player-name">{player.name}{!player.active && <small className="former-player-label"> · baja</small>}</span>
               <span className={`match-starter ${starterByPlayer[player.id] ? 'active' : ''}`}><input type="checkbox" checked={Boolean(starterByPlayer[player.id])} disabled={!starterByPlayer[player.id] && starterCount >= appConfig.maxStarters} onChange={(event) => { setStarterByPlayer((current) => ({ ...current, [player.id]: event.target.checked })); setErrors([]); }} aria-label={`Titular: ${player.name}`} /><Star size={16} /><small>Tit.</small></span>
@@ -173,7 +184,8 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate }: Pro
         <div className="matches-history-grid">
           <article className="panel-card match-totals-card">
             <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Temporada</p><h2>Totales por jugador</h2></div><span className="count-badge count-badge--blue">{matches.length}</span></div>
-            {totals.length ? <div className="table-scroll"><table><thead><tr><th>Jugador</th><th>Partidos</th><th>Tit.</th><th>Minutos</th><th>Goles</th></tr></thead><tbody>{totals.map((item) => <tr key={item.player.id}><td><strong>{item.player.name}</strong></td><td>{item.appearances}</td><td>{item.starts}</td><td><strong>{item.minutes}</strong></td><td><strong>{item.goals}</strong></td></tr>)}</tbody></table></div> : <div className="empty-state compact"><UsersRound size={30} /><h2>Sin minutos registrados</h2><p>Los totales aparecerán después de guardar el primer partido.</p></div>}
+            <div className="match-sort-control"><label htmlFor="match-sort">Ordenar jugadores por</label><select id="match-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as MatchSort)}><option value="number">Dorsal</option><option value="minutes">Minutos</option><option value="goals">Goles</option></select></div>
+            {totals.length ? <div className="table-scroll"><table><thead><tr><th>Dorsal</th><th>Jugador</th><th>Partidos</th><th>Tit.</th><th>Minutos</th><th>Goles</th></tr></thead><tbody>{totals.map((item) => <tr key={item.player.id}><td>{item.player.number ?? '—'}</td><td><strong>{item.player.name}</strong></td><td>{item.appearances}</td><td>{item.starts}</td><td><strong>{item.minutes}</strong></td><td><strong>{item.goals}</strong></td></tr>)}</tbody></table></div> : <div className="empty-state compact"><UsersRound size={30} /><h2>Sin minutos registrados</h2><p>Los totales aparecerán después de guardar el primer partido.</p></div>}
           </article>
           <article className="panel-card recent-matches-card">
             <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Registro</p><h2>Últimos partidos</h2></div><History /></div>
@@ -181,9 +193,9 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate }: Pro
               <span className={`match-type-icon match-type-icon--${match.type}`}><Trophy size={18} /></span>
               <div><strong>{match.opponent}</strong><small>{match.date} · {typeLabel(match.type)} · {match.durationMinutes} min · {match.minutes.filter((item) => item.starter).length} titulares</small></div>
               <span className="recent-match-goals"><strong>{match.minutes.reduce((sum, item) => sum + (item.goals ?? 0), 0)}</strong><small>goles</small></span>
-              <button type="button" className="button button--secondary match-edit-button" onClick={() => editMatch(match)} aria-label={`Editar partido contra ${match.opponent} del ${match.date}`}><Pencil size={16} /> Editar</button>
+              <div className="match-row-actions"><button type="button" className="button button--secondary match-edit-button" disabled={saving} onClick={() => editMatch(match)} aria-label={`Editar partido contra ${match.opponent} del ${match.date}`}><Pencil size={16} /> Editar</button><button type="button" className="button button--secondary match-delete-button" disabled={saving} onClick={() => confirmDelete(match)} aria-label={`Eliminar partido contra ${match.opponent} del ${match.date}`}><Trash2 size={16} /> Eliminar</button></div>
               <details className="match-history-detail"><summary>Ver acta y dorsales de este partido</summary>
-                <div className="table-scroll"><table><thead><tr><th>Dorsal</th><th>Jugador</th><th>Titular</th><th>Minutos</th><th>Goles</th></tr></thead><tbody>{match.minutes.map((entry) => <tr key={entry.playerId}><td>{entry.number ?? '—'}</td><td>{entry.playerName}</td><td>{entry.starter ? 'Sí' : 'No'}</td><td>{entry.minutes}</td><td>{entry.goals ?? 0}</td></tr>)}</tbody></table></div>
+                <div className="table-scroll"><table><thead><tr><th>Dorsal</th><th>Jugador</th><th>Titular</th><th>Minutos</th><th>Goles</th></tr></thead><tbody>{sortMatchStats(match.minutes.map((entry) => ({ ...entry, name: entry.playerName })), sortBy).map((entry) => <tr key={entry.playerId}><td>{entry.number ?? '—'}</td><td>{entry.playerName}</td><td>{entry.starter ? 'Sí' : 'No'}</td><td>{entry.minutes}</td><td>{entry.goals ?? 0}</td></tr>)}</tbody></table></div>
               </details>
             </article>)}</div> : <div className="empty-state compact"><Trophy size={30} /><h2>Todavía no hay partidos</h2><button className="text-button" onClick={() => setMode('new')}>Registrar el primero</button></div>}
           </article>

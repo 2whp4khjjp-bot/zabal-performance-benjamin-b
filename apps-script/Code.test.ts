@@ -63,5 +63,11 @@ describe('Apps Script: cambio de dorsal', () => {
     changeNumber('p1', 15, 12, { role: 'staff' });
     expect(minutes.values[1][6]).toBe(7);
     expect(minutes.values[3][6]).toBe(12);
+    const deleteMatch = context.deleteMatch_ as (id: string, expectedUpdatedAt: string, session: object) => boolean;
+    expect(() => deleteMatch('m1', 'versión antigua', { role: 'staff' })).toThrow('ha cambiado');
+    expect(deleteMatch('m1', '2026-09-01T00:00:00.000Z', { role: 'staff' })).toBe(true);
+    expect(Object.prototype.toString.call(matches.values[1][8])).toBe('[object Date]');
+    expect(getMatches({ role: 'staff' })).toHaveLength(0);
+    expect(() => deleteMatch('m1', '2026-09-01T00:00:00.000Z', { role: 'staff' })).toThrow('No se encontró');
   });
 });

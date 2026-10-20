@@ -122,6 +122,7 @@ export type MatchRecord = {
   createdAt: string;
   updatedAt: string;
   createdBy: string;
+  deletedAt?: string;
 };
 
 export type MatchInput = {

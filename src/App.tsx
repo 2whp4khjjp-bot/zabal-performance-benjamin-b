@@ -183,6 +183,23 @@ export default function App() {
     }
   };
 
+  const deleteMatch = async (match: MatchRecord) => {
+    if (!auth || auth.role !== 'staff') return false;
+    setSaving(true);
+    setError('');
+    try {
+      await dataService.deleteMatch(auth.token, match.id, match.updatedAt);
+      setMatches((current) => current.filter((item) => item.id !== match.id));
+      setToast('Partido eliminado del historial y los acumulados');
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo eliminar el partido.');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const addPlayer = async (input: PlayerInput) => {
     if (!auth || auth.role !== 'staff') return false;
     setSaving(true);
@@ -272,7 +289,7 @@ export default function App() {
       {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} saving={saving} onAddPlayer={addPlayer} onRemovePlayer={removePlayer} onUpdatePlayerNumber={updatePlayerNumber} />}
       {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} session={trainingSession} saving={saving} onSave={saveMeasurement} onBack={() => setSelectedPlayer(null)} role={auth.role} />}
       <Suspense fallback={<div className="loading-screen"><span className="loader" /><p>Cargando módulo…</p></div>}>
-        {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} onUpdate={updateMatch} />}
+        {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} onUpdate={updateMatch} onDelete={deleteMatch} />}
         {!loading && auth.role === 'staff' && view === 'attendance' && <AttendancePanel players={players} attendance={attendance} saving={saving} onSave={saveAttendance} />}
         {!loading && auth.role === 'staff' && view === 'technical' && <TechnicalPanel players={players} measurements={measurements} />}
       </Suspense>

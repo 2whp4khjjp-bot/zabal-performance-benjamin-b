@@ -327,6 +327,12 @@ tbody tr:hover { background: #f8fafc; }
 .match-save-bar { position: sticky; bottom: 0; z-index: 5; margin: 16px -22px 0; padding: 15px 22px; border-top: 1px solid var(--border); background: rgba(250,251,253,.96); backdrop-filter: blur(8px); display: flex; flex-wrap: wrap; gap: 10px; }
 .former-player-label { color: var(--muted); font-weight: 600; }
 .match-edit-button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.match-delete-button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: #a13838; }
+.match-delete-button:hover { border-color: #d7a2a2; background: #fff3f3; }
+.match-row-actions { display: flex; align-items: center; gap: 6px; }
+.match-sort-control { padding: 0 22px 16px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: .82rem; font-weight: 700; }
+.match-sort-control select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: white; color: var(--navy); font: inherit; }
+.match-sort-control--form { padding: 0 0 15px; }
 .matches-history-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, .75fr); align-items: start; gap: 18px; }
 .count-badge--blue { color: #245f95; background: #e3eff9; }
 .match-totals-card { padding: 0; overflow: hidden; }
@@ -336,6 +342,7 @@ tbody tr:hover { background: #f8fafc; }
 .recent-match-row { padding: 13px 0; border-top: 1px solid var(--border); display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto; align-items: center; gap: 11px; }
 .recent-match-row:first-child { border-top: 0; }
 .recent-match-row > div { min-width: 0; display: flex; flex-direction: column; }
+.recent-match-row > .match-row-actions { flex-direction: row; flex-wrap: wrap; }
 .recent-match-row > div strong { overflow: hidden; text-overflow: ellipsis; color: var(--navy); white-space: nowrap; }
 .recent-match-row small { margin-top: 3px; color: var(--muted); font-size: .72rem; }
 .recent-match-row > span:last-child { display: flex; flex-direction: column; align-items: flex-end; color: var(--navy); }
@@ -494,7 +501,7 @@ tbody tr:hover { background: #f8fafc; }
   .match-save-bar .button { width: 100%; }
   .match-form-summary { gap: 9px; flex-direction: column; }
   .recent-match-row { grid-template-columns: 42px minmax(0, 1fr) auto; }
-  .match-edit-button { grid-column: 2 / -1; justify-self: end; }
+  .match-row-actions { grid-column: 2 / -1; justify-self: end; }
   .attendance-toolbar > label { align-items: stretch; flex-direction: column; }
   .attendance-list { padding: 0 14px; }
   .attendance-row { padding: 13px 0; grid-template-columns: 36px minmax(0, 1fr); gap: 8px 10px; }

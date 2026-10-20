@@ -22,7 +22,7 @@ const HEADERS = {
   Sesiones: ['id', 'fecha', 'tipo_sesion', 'rival', 'jornada', 'activa', 'hora_apertura', 'hora_cierre'],
   Configuración: ['clave', 'valor'],
   'Códigos jugadores': ['jugador_id', 'jugador_nombre', 'pin'],
-  Partidos: ['id', 'fecha', 'tipo', 'rival', 'duracion_minutos', 'creado_en', 'actualizado_en', 'creado_por'],
+  Partidos: ['id', 'fecha', 'tipo', 'rival', 'duracion_minutos', 'creado_en', 'actualizado_en', 'creado_por', 'eliminado_en'],
   'Minutos partidos': ['partido_id', 'jugador_id', 'jugador_nombre', 'minutos', 'goles', 'titular', 'dorsal'],
   Asistencia: ['id', 'fecha', 'jugador_id', 'jugador_nombre', 'estado', 'comentarios', 'creado_en', 'actualizado_en', 'creado_por'],
 };
@@ -68,7 +68,7 @@ function initializePlayerPins() {
 }
 
 function doGet() {
-  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 6 } });
+  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 7 } });
 }
 
 function doPost(event) {
@@ -91,6 +91,7 @@ function doPost(event) {
     if (action === 'getMatches') return json_({ ok: true, data: getMatches_(session) });
     if (action === 'saveMatch') return json_({ ok: true, data: saveMatch_(input.match, session) });
     if (action === 'updateMatch') return json_({ ok: true, data: updateMatch_(input.matchId, input.match, input.expectedUpdatedAt, session) });
+    if (action === 'deleteMatch') return json_({ ok: true, data: deleteMatch_(input.matchId, input.expectedUpdatedAt, session) });
     throw apiError_('Acción no permitida.', 'INVALID_ACTION');
   } catch (error) {
     console.error(error && error.stack ? error.stack : error);
@@ -384,8 +385,17 @@ function ensureMatchMinutesSheet_() {
   return spreadsheet.getSheetByName(SHEETS.MATCH_MINUTES);
 }
 
+function ensureMatchesSheet_() {
+  const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+  if (!id) throw apiError_('La hoja de cálculo no está configurada.', 'CONFIG');
+  const spreadsheet = SpreadsheetApp.openById(id);
+  ensureSheet_(spreadsheet, SHEETS.MATCHES, HEADERS.Partidos);
+  return spreadsheet.getSheetByName(SHEETS.MATCHES);
+}
+
 function getMatches_(session) {
   requireStaff_(session);
+  ensureMatchesSheet_();
   ensureMatchMinutesSheet_();
   const currentNumbers = {};
   rows_(SHEETS.PLAYERS).forEach(function(player) { currentNumbers[String(player.id)] = numberOrNull_(player.dorsal) || null; });
@@ -402,7 +412,7 @@ function getMatches_(session) {
       starter: boolean_(row.titular),
     });
   });
-  return rows_(SHEETS.MATCHES).map(function(row) {
+  return rows_(SHEETS.MATCHES).filter(function(row) { return !hasValue_(row.eliminado_en); }).map(function(row) {
     return {
       id: String(row.id),
       date: dateKey_(row.fecha),
@@ -467,7 +477,7 @@ function saveMatch_(input, session) {
   try {
     const id = Utilities.getUuid();
     const now = new Date();
-    sheet_(SHEETS.MATCHES).appendRow([id, clean.date, clean.type, clean.opponent, clean.duration, now, now, 'cuerpo-tecnico']);
+    ensureMatchesSheet_().appendRow([id, clean.date, clean.type, clean.opponent, clean.duration, now, now, 'cuerpo-tecnico']);
     const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.goals, entry.starter, entry.number || 0]; });
     const minutesSheet = ensureMatchMinutesSheet_();
     minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
@@ -487,12 +497,12 @@ function updateMatch_(matchId, input, expectedUpdatedAt, session) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo en unos segundos.', 'BUSY');
   try {
-    const matchSheet = sheet_(SHEETS.MATCHES);
+    const matchSheet = ensureMatchesSheet_();
     const matchValues = matchSheet.getDataRange().getValues();
     const matchHeaders = matchValues[0].map(String);
     const matchIndex = matchHeaders.indexOf('id');
     const matchRowIndex = matchValues.findIndex(function(row, index) { return index > 0 && String(row[matchIndex]) === id; });
-    if (matchRowIndex < 0) throw apiError_('No se encontró el partido.', 'NOT_FOUND');
+    if (matchRowIndex < 0 || hasValue_(matchValues[matchRowIndex][matchHeaders.indexOf('eliminado_en')])) throw apiError_('No se encontró el partido.', 'NOT_FOUND');
     const previous = matchValues[matchRowIndex];
     if (iso_(previous[matchHeaders.indexOf('actualizado_en')]) !== String(expectedUpdatedAt || '')) {
       throw apiError_('Este partido ha cambiado. Recarga la página antes de editarlo.', 'CONFLICT');
@@ -529,6 +539,29 @@ function updateMatch_(matchId, input, expectedUpdatedAt, session) {
       minutes: clean.entries, createdAt: iso_(previous[matchHeaders.indexOf('creado_en')]), updatedAt: now.toISOString(),
       createdBy: String(previous[matchHeaders.indexOf('creado_por')] || 'cuerpo-tecnico'),
     };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteMatch_(matchId, expectedUpdatedAt, session) {
+  requireStaff_(session);
+  const id = String(matchId || '').trim();
+  if (!id) throw apiError_('Falta el identificador del partido.', 'VALIDATION');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo en unos segundos.', 'BUSY');
+  try {
+    const matchSheet = ensureMatchesSheet_();
+    const values = matchSheet.getDataRange().getValues();
+    const headers = values[0].map(String);
+    const idColumn = headers.indexOf('id');
+    const deletedColumn = headers.indexOf('eliminado_en');
+    const rowIndex = values.findIndex(function(row, index) { return index > 0 && String(row[idColumn]) === id; });
+    if (rowIndex < 0 || hasValue_(values[rowIndex][deletedColumn])) throw apiError_('No se encontró el partido.', 'NOT_FOUND');
+    const updatedAt = iso_(values[rowIndex][headers.indexOf('actualizado_en')]);
+    if (updatedAt !== String(expectedUpdatedAt || '')) throw apiError_('Este partido ha cambiado. Recarga la página antes de eliminarlo.', 'CONFLICT');
+    matchSheet.getRange(rowIndex + 1, deletedColumn + 1).setValue(new Date());
+    return true;
   } finally {
     lock.releaseLock();
   }

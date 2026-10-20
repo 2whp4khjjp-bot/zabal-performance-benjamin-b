@@ -242,7 +242,7 @@ export class LocalDataService implements DataService {
     if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede consultar los partidos.', 'FORBIDDEN');
     const players = readJson(PLAYERS_KEY, demoPlayers);
     const numbers = new Map(players.map((player) => [player.id, player.number ?? null]));
-    return readJson<MatchRecord[]>(MATCHES_KEY, []).map((match) => ({ ...match, minutes: match.minutes.map((entry) => ({
+    return readJson<MatchRecord[]>(MATCHES_KEY, []).filter((match) => !match.deletedAt).map((match) => ({ ...match, minutes: match.minutes.map((entry) => ({
       ...entry, number: entry.number === undefined ? numbers.get(entry.playerId) ?? null : entry.number,
     })) })).sort((a, b) => `${b.date}${b.createdAt}`.localeCompare(`${a.date}${a.createdAt}`));
   }
@@ -268,7 +268,7 @@ export class LocalDataService implements DataService {
     if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede modificar partidos.', 'FORBIDDEN');
     const matches = readJson<MatchRecord[]>(MATCHES_KEY, []);
     const index = matches.findIndex((match) => match.id === matchId);
-    if (index < 0) throw new DataServiceError('No se encontró el partido.', 'NOT_FOUND');
+    if (index < 0 || matches[index].deletedAt) throw new DataServiceError('No se encontró el partido.', 'NOT_FOUND');
     const previous = matches[index];
     if (previous.updatedAt !== expectedUpdatedAt) throw new DataServiceError('Este partido ha cambiado. Recarga la página antes de editarlo.', 'CONFLICT');
     const { opponent, minutes } = validateMatch(input, readJson(PLAYERS_KEY, demoPlayers), previous);
@@ -277,5 +277,17 @@ export class LocalDataService implements DataService {
     matches[index] = updated;
     localStorage.setItem(MATCHES_KEY, JSON.stringify(matches));
     return updated;
+  }
+
+  async deleteMatch(token: string, matchId: string, expectedUpdatedAt: string): Promise<boolean> {
+    const auth = this.requireSession(token);
+    if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede eliminar partidos.', 'FORBIDDEN');
+    const matches = readJson<MatchRecord[]>(MATCHES_KEY, []);
+    const match = matches.find((item) => item.id === matchId && !item.deletedAt);
+    if (!match) throw new DataServiceError('No se encontró el partido.', 'NOT_FOUND');
+    if (match.updatedAt !== expectedUpdatedAt) throw new DataServiceError('Este partido ha cambiado. Recarga la página antes de eliminarlo.', 'CONFLICT');
+    match.deletedAt = new Date().toISOString();
+    localStorage.setItem(MATCHES_KEY, JSON.stringify(matches));
+    return true;
   }
 }

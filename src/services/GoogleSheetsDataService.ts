@@ -107,4 +107,8 @@ export class GoogleSheetsDataService implements DataService {
   updateMatch(token: string, matchId: string, input: MatchInput, expectedUpdatedAt: string) {
     return this.request<MatchRecord>('updateMatch', { token, matchId, match: input, expectedUpdatedAt });
   }
+
+  deleteMatch(token: string, matchId: string, expectedUpdatedAt: string) {
+    return this.request<boolean>('deleteMatch', { token, matchId, expectedUpdatedAt });
+  }
 }

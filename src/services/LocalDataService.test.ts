@@ -59,6 +59,20 @@ describe('servicio local', () => {
       date: '2026-09-02', type: 'friendly', opponent: 'Duplicado', durationMinutes: 50, minutes: corrected.minutes,
     }, saved.updatedAt)).rejects.toThrow('ha cambiado');
   });
+  it('elimina un partido del historial y de los acumulados sin reutilizar una versión antigua', async () => {
+    const service = new LocalDataService();
+    const staff = await service.authenticate('2026', 'staff');
+    const player = (await service.getPlayers(staff.token))[0];
+    const input = { date: '2026-09-01', type: 'official' as const, opponent: 'Rival', durationMinutes: 60,
+      minutes: [{ playerId: player.id, playerName: player.name, minutes: 40, starter: true, goals: 1 }] };
+    const first = await service.saveMatch(staff.token, input);
+    const second = await service.saveMatch(staff.token, { ...input, date: '2026-09-08' });
+    await expect(service.deleteMatch(staff.token, first.id, 'versión antigua')).rejects.toThrow('ha cambiado');
+    expect(await service.deleteMatch(staff.token, first.id, first.updatedAt)).toBe(true);
+    expect((await service.getMatches(staff.token)).map((match) => match.id)).toEqual([second.id]);
+    await expect(service.deleteMatch(staff.token, first.id, first.updatedAt)).rejects.toThrow('No se encontró');
+    await expect(service.updateMatch(staff.token, first.id, input, first.updatedAt)).rejects.toThrow('No se encontró');
+  });
   it('añade y da de baja jugadores sin perder el registro', async () => {
     const service = new LocalDataService();
     const staff = await service.authenticate('2026', 'staff');

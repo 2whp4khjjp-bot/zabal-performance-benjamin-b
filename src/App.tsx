@@ -218,6 +218,26 @@ export default function App() {
     }
   };
 
+  const updatePlayerNumber = async (player: Player, number: number | undefined) => {
+    if (!auth || auth.role !== 'staff') return false;
+    setSaving(true);
+    setError('');
+    try {
+      const saved = await dataService.updatePlayerNumber(auth.token, player.id, number, player.number);
+      setMatches((current) => current.map((match) => ({ ...match, minutes: match.minutes.map((entry) =>
+        entry.playerId === player.id && entry.number === undefined ? { ...entry, number: player.number ?? null } : entry) })));
+      setPlayers((current) => current.map((item) => item.id === saved.id ? saved : item));
+      setSelectedPlayer((current) => current?.id === saved.id ? saved : current);
+      setToast(`Dorsal de ${saved.name} actualizado`);
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo cambiar el dorsal.');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveAttendance = async (input: AttendanceInput) => {
     if (!auth || auth.role !== 'staff') return false;
     setSaving(true);
@@ -249,7 +269,7 @@ export default function App() {
       <AppHeader remaining={remaining} view={view} role={auth.role} playerName={auth.playerName} onViewChange={(next) => { setView(next); setSelectedPlayer(null); }} onLogout={() => void logout()} />
       {error && <div className="global-error" role="alert"><span>{error}</span><button onClick={() => setError('')}>Cerrar</button></div>}
       {loading && !players.length ? <div className="loading-screen"><span className="loader" /><p>Preparando la sesión…</p></div> : null}
-      {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} saving={saving} onAddPlayer={addPlayer} onRemovePlayer={removePlayer} />}
+      {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} saving={saving} onAddPlayer={addPlayer} onRemovePlayer={removePlayer} onUpdatePlayerNumber={updatePlayerNumber} />}
       {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} session={trainingSession} saving={saving} onSave={saveMeasurement} onBack={() => setSelectedPlayer(null)} role={auth.role} />}
       <Suspense fallback={<div className="loading-screen"><span className="loader" /><p>Cargando módulo…</p></div>}>
         {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} onUpdate={updateMatch} />}

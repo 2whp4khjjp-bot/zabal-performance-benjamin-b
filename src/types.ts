@@ -1,7 +1,7 @@
 export type Player = {
   id: string;
   name: string;
-  number?: number;
+  number?: number | null;
   active: boolean;
   order: number;
   joinedAt: string;
@@ -106,6 +106,7 @@ export type MatchType = 'official' | 'friendly';
 export type MatchMinutes = {
   playerId: string;
   playerName: string;
+  number?: number | null;
   minutes: number;
   starter?: boolean;
   goals?: number;

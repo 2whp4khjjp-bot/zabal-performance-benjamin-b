@@ -68,6 +68,10 @@ export class GoogleSheetsDataService implements DataService {
     return this.request<Player>('addPlayer', { token, player: input });
   }
 
+  updatePlayerNumber(token: string, playerId: string, number: number | undefined, expectedNumber: number | null | undefined) {
+    return this.request<Player>('updatePlayerNumber', { token, playerId, number: number ?? null, expectedNumber: expectedNumber ?? null });
+  }
+
   removePlayer(token: string, playerId: string) {
     return this.request<boolean>('removePlayer', { token, playerId });
   }

@@ -69,6 +69,33 @@ describe('servicio local', () => {
     expect(await service.getPlayers(staff.token)).toHaveLength(originalCount);
     await expect(service.addPlayer(staff.token, { name: 'Otro Jugador', number: 1 })).rejects.toThrow('dorsal');
   });
+  it('cambia el dorsal sin perder el número de las actas anteriores', async () => {
+    const service = new LocalDataService();
+    const staff = await service.authenticate('2026', 'staff');
+    const player = await service.addPlayer(staff.token, { name: 'Jugador con dorsal', number: 26 });
+    const first = await service.saveMatch(staff.token, {
+      date: '2026-09-10', type: 'official', opponent: 'Primer rival', durationMinutes: 60,
+      minutes: [{ playerId: player.id, playerName: player.name, minutes: 40, starter: true, goals: 1 }],
+    });
+    const revised = await service.updatePlayerNumber(staff.token, player.id, 30, 26);
+    expect(revised.id).toBe(player.id);
+    expect(revised.number).toBe(30);
+    expect((await service.getMatches(staff.token))[0].minutes[0].number).toBe(26);
+    expect((await service.getPlayers(staff.token)).find((item) => item.id === player.id)?.number).toBe(30);
+    await expect(service.updatePlayerNumber(staff.token, player.id, 1, 26)).rejects.toThrow('ha cambiado');
+    await expect(service.updatePlayerNumber(staff.token, player.id, 1, 30)).rejects.toThrow('asignado');
+    const updated = await service.updateMatch(staff.token, first.id, {
+      date: first.date, type: first.type, opponent: first.opponent, durationMinutes: first.durationMinutes,
+      minutes: [{ playerId: player.id, playerName: player.name, minutes: 45, starter: true, goals: 2 }],
+    }, first.updatedAt);
+    expect(updated.minutes[0].number).toBe(26);
+    const second = await service.saveMatch(staff.token, {
+      date: '2026-09-17', type: 'official', opponent: 'Segundo rival', durationMinutes: 60,
+      minutes: [{ playerId: player.id, playerName: player.name, minutes: 50, starter: true, goals: 0 }],
+    });
+    expect(second.minutes[0].number).toBe(30);
+    expect((await service.getMatches(staff.token))).toHaveLength(2);
+  });
   it('guarda y modifica la asistencia manual de un día anterior', async () => {
     const service = new LocalDataService();
     const staff = await service.authenticate('2026', 'staff');

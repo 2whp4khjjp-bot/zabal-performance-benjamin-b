@@ -284,6 +284,12 @@ tbody tr:hover { background: #f8fafc; }
 .roster-manager-list { border-top: 1px solid var(--border); }
 .roster-manager-list > div { min-height: 58px; padding: 8px 0; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 11px; }
 .roster-manager-list strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--navy); white-space: nowrap; }
+.roster-player-actions { display: flex; gap: 8px; align-items: center; }
+.roster-edit-button { min-height: 36px; padding: 0 10px; display: inline-flex; gap: 6px; align-items: center; }
+.roster-number-form { grid-column: 2 / -1; padding: 6px 0 10px; display: flex; flex-wrap: wrap; align-items: end; gap: 9px; }
+.roster-number-form label { min-width: 180px; display: flex; flex-direction: column; gap: 5px; color: #526174; font-size: .78rem; font-weight: 800; }
+.roster-number-form input { height: 40px; padding: 0 10px; border: 1px solid #cbd6e1; border-radius: 8px; color: var(--navy); }
+.roster-number-form .button { min-height: 40px; }
 .roster-remove-button { min-height: 36px; padding: 0 10px; border: 1px solid #efc7cc; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; color: #a22f3c; background: #fff7f8; font-weight: 800; }
 .roster-remove-button:disabled { opacity: .55; }
 
@@ -334,6 +340,11 @@ tbody tr:hover { background: #f8fafc; }
 .recent-match-row small { margin-top: 3px; color: var(--muted); font-size: .72rem; }
 .recent-match-row > span:last-child { display: flex; flex-direction: column; align-items: flex-end; color: var(--navy); }
 .recent-match-row .recent-match-goals { display: flex; flex-direction: column; align-items: flex-end; color: var(--navy); }
+.match-history-detail { grid-column: 1 / -1; color: var(--navy); }
+.match-history-detail summary { width: fit-content; cursor: pointer; color: var(--blue); font-size: .8rem; font-weight: 800; }
+.match-history-detail .table-scroll { margin-top: 10px; }
+.match-history-detail table { width: 100%; border-collapse: collapse; }
+.match-history-detail th, .match-history-detail td { padding: 7px 9px; border-bottom: 1px solid var(--border); text-align: left; font-size: .78rem; }
 .match-type-icon { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; }
 .match-type-icon--official { color: #7b5b00; background: #fff0bc; }
 .match-type-icon--friendly { color: #245f95; background: #e3eff9; }
@@ -469,7 +480,8 @@ tbody tr:hover { background: #f8fafc; }
   .roster-add-form { grid-template-columns: 1fr; }
   .roster-add-form .button { grid-column: auto; }
   .roster-manager-list > div { grid-template-columns: 36px minmax(0, 1fr); }
-  .roster-remove-button { grid-column: 2; justify-self: start; }
+  .roster-player-actions { grid-column: 2; flex-wrap: wrap; }
+  .roster-number-form { grid-column: 1 / -1; }
   .login-intro { min-height: 46vh; }
   .login-intro__copy { font-size: 1rem; }
   .form-heading h1 { font-size: 1.7rem; }

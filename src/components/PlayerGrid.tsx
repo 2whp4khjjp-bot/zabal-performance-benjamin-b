@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, CircleDashed, Plus, Search, ShieldAlert, Trash2, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CircleDashed, Pencil, Plus, Save, Search, ShieldAlert, Trash2, UsersRound, X } from 'lucide-react';
 import { useState } from 'react';
 import type { DashboardFilter, Measurement, Player, PlayerInput } from '../types';
 import { todayKey } from '../utils/date';
@@ -15,6 +15,7 @@ type PlayerGridProps = {
   saving: boolean;
   onAddPlayer: (input: PlayerInput) => Promise<boolean>;
   onRemovePlayer: (player: Player) => Promise<boolean>;
+  onUpdatePlayerNumber: (player: Player, number: number | undefined) => Promise<boolean>;
 };
 
 const statusIcon = {
@@ -25,10 +26,12 @@ const statusIcon = {
   alert: ShieldAlert,
 };
 
-export function PlayerGrid({ players, measurements, onSelect, filter, onFilterChange, query, onQueryChange, saving, onAddPlayer, onRemovePlayer }: PlayerGridProps) {
+export function PlayerGrid({ players, measurements, onSelect, filter, onFilterChange, query, onQueryChange, saving, onAddPlayer, onRemovePlayer, onUpdatePlayerNumber }: PlayerGridProps) {
   const [managing, setManaging] = useState(false);
   const [name, setName] = useState('');
   const [number, setNumber] = useState('');
+  const [editingNumberId, setEditingNumberId] = useState<string | null>(null);
+  const [newNumber, setNewNumber] = useState('');
   const today = todayKey();
   const todayByPlayer = new Map(measurements.filter((item) => item.date === today).map((item) => [item.playerId, item]));
   const registered = todayByPlayer.size;
@@ -42,6 +45,14 @@ export function PlayerGrid({ players, measurements, onSelect, filter, onFilterCh
     event.preventDefault();
     const saved = await onAddPlayer({ name: name.trim(), number: number === '' ? undefined : Number(number) });
     if (saved) { setName(''); setNumber(''); }
+  };
+
+  const updateNumber = async (event: React.FormEvent, player: Player) => {
+    event.preventDefault();
+    if (await onUpdatePlayerNumber(player, newNumber === '' ? undefined : Number(newNumber))) {
+      setEditingNumberId(null);
+      setNewNumber('');
+    }
   };
 
   return (
@@ -61,13 +72,24 @@ export function PlayerGrid({ players, measurements, onSelect, filter, onFilterCh
       </div>
 
       {managing && <section className="panel-card roster-manager" aria-label="Gestión de plantilla">
-        <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Plantilla activa</p><h2>Añadir o eliminar jugadores</h2><p>Las bajas conservan todo el historial del jugador.</p></div><span className="count-badge count-badge--blue">{players.length}</span></div>
+        <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Plantilla activa</p><h2>Gestionar jugadores y dorsales</h2><p>Los cambios de dorsal y las bajas conservan el historial del jugador.</p></div><span className="count-badge count-badge--blue">{players.length}</span></div>
         <form className="roster-add-form" onSubmit={(event) => void addPlayer(event)}>
           <label>Nombre<input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} placeholder="Nombre y apellidos" required /></label>
           <label>Dorsal<input value={number} onChange={(event) => setNumber(event.target.value.replace(/\D/g, '').slice(0, 2))} type="number" min="1" max="99" inputMode="numeric" placeholder="Opcional" /></label>
           <button className="button button--primary" type="submit" disabled={saving || name.trim().length < 2}><Plus size={18} /> {saving ? 'Guardando…' : 'Añadir jugador'}</button>
         </form>
-        <div className="roster-manager-list">{players.map((player) => <div key={player.id}><span className="player-card__number">{player.number ?? '—'}</span><strong>{player.name}</strong><button type="button" className="roster-remove-button" disabled={saving} onClick={() => { if (window.confirm(`¿Eliminar a ${player.name} de la plantilla activa? Su historial se conservará.`)) void onRemovePlayer(player); }}><Trash2 size={16} /> Eliminar</button></div>)}</div>
+        <div className="roster-manager-list">{players.map((player) => <div key={player.id}>
+          <span className="player-card__number">{player.number ?? '—'}</span><strong>{player.name}</strong>
+          <div className="roster-player-actions">
+            <button type="button" className="button button--secondary roster-edit-button" disabled={saving} onClick={() => { setEditingNumberId(player.id); setNewNumber(player.number === null || player.number === undefined ? '' : String(player.number)); }}><Pencil size={16} /> Dorsal</button>
+            <button type="button" className="roster-remove-button" disabled={saving} onClick={() => { if (window.confirm(`¿Eliminar a ${player.name} de la plantilla activa? Su historial se conservará.`)) void onRemovePlayer(player); }}><Trash2 size={16} /> Eliminar</button>
+          </div>
+          {editingNumberId === player.id && <form className="roster-number-form" onSubmit={(event) => void updateNumber(event, player)}>
+            <label>Nuevo dorsal para {player.name}<input value={newNumber} onChange={(event) => setNewNumber(event.target.value.replace(/\D/g, '').slice(0, 2))} type="number" min="1" max="99" inputMode="numeric" placeholder="Sin dorsal" /></label>
+            <button className="button button--primary" type="submit" disabled={saving || (newNumber === '' ? null : Number(newNumber)) === (player.number ?? null)}><Save size={16} /> Guardar dorsal</button>
+            <button className="button button--secondary" type="button" onClick={() => setEditingNumberId(null)} disabled={saving}>Cancelar</button>
+          </form>}
+        </div>)}</div>
       </section>}
 
       <section className="player-toolbar" aria-label="Filtros de jugadores">

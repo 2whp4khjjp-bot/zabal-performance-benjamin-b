@@ -15,7 +15,7 @@ La identidad visual toma como referencia general la web del Atlético Zabal Line
 - Guardado acumulativo por fases: peso/molestias antes y fatiga después, sin borrar campos ya registrados.
 - Borrador local por jugador para no perder el formulario si se corta la conexión.
 - Actas de partido con minutos, titularidades y goles por jugador. Los partidos ya registrados se pueden corregir desde Historial, incluidos fecha, tipo, rival, duración y participación, conservando su identificador.
-- Gestión de la plantilla desde la aplicación, con altas y bajas que conservan el historial.
+- Gestión de la plantilla desde la aplicación, con altas, bajas y cambios de dorsal. Cada acta conserva el dorsal que tenía el jugador cuando se registró y puede consultarse en el historial.
 - Evolución individual con las últimas diez mediciones.
 - Panel técnico con resumen, alertas, filtros, ordenación y comparativa semanal.
 - Exportación a CSV y Excel.

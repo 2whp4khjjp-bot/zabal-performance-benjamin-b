@@ -6,6 +6,7 @@ export interface DataService {
   getBootstrap(token: string): Promise<BootstrapData>;
   getPlayers(token: string): Promise<Player[]>;
   addPlayer(token: string, input: PlayerInput): Promise<Player>;
+  updatePlayerNumber(token: string, playerId: string, number: number | undefined, expectedNumber: number | null | undefined): Promise<Player>;
   removePlayer(token: string, playerId: string): Promise<boolean>;
   getMeasurements(token: string): Promise<Measurement[]>;
   getCurrentSession(token: string): Promise<TrainingSession>;

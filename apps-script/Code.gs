@@ -23,7 +23,7 @@ const HEADERS = {
   Configuración: ['clave', 'valor'],
   'Códigos jugadores': ['jugador_id', 'jugador_nombre', 'pin'],
   Partidos: ['id', 'fecha', 'tipo', 'rival', 'duracion_minutos', 'creado_en', 'actualizado_en', 'creado_por'],
-  'Minutos partidos': ['partido_id', 'jugador_id', 'jugador_nombre', 'minutos', 'goles', 'titular'],
+  'Minutos partidos': ['partido_id', 'jugador_id', 'jugador_nombre', 'minutos', 'goles', 'titular', 'dorsal'],
   Asistencia: ['id', 'fecha', 'jugador_id', 'jugador_nombre', 'estado', 'comentarios', 'creado_en', 'actualizado_en', 'creado_por'],
 };
 
@@ -68,7 +68,7 @@ function initializePlayerPins() {
 }
 
 function doGet() {
-  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 5 } });
+  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 6 } });
 }
 
 function doPost(event) {
@@ -81,6 +81,7 @@ function doPost(event) {
     if (action === 'getBootstrap') return json_({ ok: true, data: getBootstrap_(session) });
     if (action === 'getPlayers') return json_({ ok: true, data: getPlayers_(session) });
     if (action === 'addPlayer') return json_({ ok: true, data: addPlayer_(input.player, session) });
+    if (action === 'updatePlayerNumber') return json_({ ok: true, data: updatePlayerNumber_(input.playerId, input.number, input.expectedNumber, session) });
     if (action === 'removePlayer') return json_({ ok: true, data: removePlayer_(input.playerId, session) });
     if (action === 'getMeasurements') return json_({ ok: true, data: getMeasurements_(session) });
     if (action === 'getCurrentSession') return json_({ ok: true, data: getCurrentSession_() });
@@ -209,6 +210,45 @@ function addPlayer_(input, session) {
     });
     sheet.appendRow(newRow);
     return player;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function updatePlayerNumber_(playerId, requestedNumber, expectedNumber, session) {
+  requireStaff_(session);
+  const id = String(playerId || '').trim();
+  const hasNumber = requestedNumber !== undefined && requestedNumber !== null && String(requestedNumber) !== '';
+  const number = hasNumber ? Number(requestedNumber) : null;
+  if (!id) throw apiError_('Jugador no válido.', 'INVALID_PLAYER');
+  if (hasNumber && (!Number.isInteger(number) || number < 1 || number > 99)) throw apiError_('El dorsal debe estar entre 1 y 99.', 'VALIDATION');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo en unos segundos.', 'BUSY');
+  try {
+    const playerSheet = ensurePlayersSheet_();
+    const values = playerSheet.getDataRange().getValues();
+    const headers = values[0].map(String);
+    const columns = { id: headers.indexOf('id'), name: headers.indexOf('nombre'), number: headers.indexOf('dorsal'), active: headers.indexOf('activo'), order: headers.indexOf('orden'), joinedAt: headers.indexOf('fecha_alta') };
+    const rowIndex = values.findIndex(function(row, index) { return index > 0 && String(row[columns.id]) === id && boolean_(row[columns.active]); });
+    if (rowIndex < 0) throw apiError_('El jugador ya no pertenece a la plantilla activa.', 'INVALID_PLAYER');
+    const row = values[rowIndex];
+    const oldNumber = numberOrNull_(row[columns.number]) || null;
+    if (oldNumber !== (expectedNumber === null || expectedNumber === undefined ? null : Number(expectedNumber))) throw apiError_('El dorsal ha cambiado. Recarga la página antes de editarlo.', 'CONFLICT');
+    if (number === oldNumber) return { id: id, name: String(row[columns.name]), number: number, active: true, order: Number(row[columns.order] || 0), joinedAt: dateKey_(row[columns.joinedAt]) };
+    if (number !== null && values.some(function(other, index) { return index > 0 && index !== rowIndex && boolean_(other[columns.active]) && Number(other[columns.number]) === number; })) throw apiError_('Ese dorsal ya está asignado.', 'DUPLICATE_NUMBER');
+
+    const minutesSheet = ensureMatchMinutesSheet_();
+    const minuteValues = minutesSheet.getDataRange().getValues();
+    const minuteHeaders = minuteValues[0].map(String);
+    const minutePlayerColumn = minuteHeaders.indexOf('jugador_id');
+    const snapshotColumn = minuteHeaders.indexOf('dorsal');
+    minuteValues.forEach(function(minuteRow, index) {
+      if (index > 0 && String(minuteRow[minutePlayerColumn]) === id && !hasValue_(minuteRow[snapshotColumn])) {
+        minutesSheet.getRange(index + 1, snapshotColumn + 1).setValue(oldNumber === null ? 0 : oldNumber);
+      }
+    });
+    playerSheet.getRange(rowIndex + 1, columns.number + 1).setValue(number === null ? '' : number);
+    return { id: id, name: String(row[columns.name]), number: number, active: true, order: Number(row[columns.order] || 0), joinedAt: dateKey_(row[columns.joinedAt]) };
   } finally {
     lock.releaseLock();
   }
@@ -347,6 +387,8 @@ function ensureMatchMinutesSheet_() {
 function getMatches_(session) {
   requireStaff_(session);
   ensureMatchMinutesSheet_();
+  const currentNumbers = {};
+  rows_(SHEETS.PLAYERS).forEach(function(player) { currentNumbers[String(player.id)] = numberOrNull_(player.dorsal) || null; });
   const minutesByMatch = {};
   rows_(SHEETS.MATCH_MINUTES).forEach(function(row) {
     const matchId = String(row.partido_id || '');
@@ -354,6 +396,7 @@ function getMatches_(session) {
     minutesByMatch[matchId].push({
       playerId: String(row.jugador_id),
       playerName: String(row.jugador_nombre),
+      number: row.dorsal === '' || row.dorsal === undefined ? currentNumbers[String(row.jugador_id)] || null : Number(row.dorsal) || null,
       minutes: Number(row.minutos || 0),
       goals: Number(row.goles || 0),
       starter: boolean_(row.titular),
@@ -376,7 +419,7 @@ function getMatches_(session) {
   });
 }
 
-function validateMatch_(input, previousPlayerIds) {
+function validateMatch_(input, previousPlayerIds, previousNumbers) {
   if (!input) throw apiError_('Faltan los datos del partido.', 'VALIDATION');
   const date = String(input.date || '').trim();
   const type = String(input.type || '') === 'friendly' ? 'friendly' : String(input.type || '') === 'official' ? 'official' : '';
@@ -394,7 +437,7 @@ function validateMatch_(input, previousPlayerIds) {
   players.forEach(function(player) { playersById[player.id] = player; });
   if (previousPlayerIds) rows_(SHEETS.PLAYERS).forEach(function(row) {
     const id = String(row.id);
-    if (previousPlayerIds[id]) playersById[id] = { id: id, name: String(row.nombre) };
+    if (previousPlayerIds[id]) playersById[id] = { id: id, name: String(row.nombre), number: numberOrNull_(row.dorsal) || null };
   });
   const seen = {};
   const cleanEntries = entries.map(function(entry) {
@@ -407,7 +450,8 @@ function validateMatch_(input, previousPlayerIds) {
     if (!Number.isInteger(minutes) || minutes < 0 || minutes > duration) throw apiError_('Los minutos de ' + player.name + ' no son válidos.', 'VALIDATION');
     if (!Number.isInteger(goals) || goals < 0 || goals > 20) throw apiError_('Los goles de ' + player.name + ' no son válidos.', 'VALIDATION');
     seen[playerId] = true;
-    return { playerId: player.id, playerName: player.name, minutes: minutes, goals: goals, starter: starter };
+    const previousNumber = previousNumbers && Object.prototype.hasOwnProperty.call(previousNumbers, playerId) ? previousNumbers[playerId] : undefined;
+    return { playerId: player.id, playerName: player.name, number: previousNumber === undefined ? player.number || null : previousNumber, minutes: minutes, goals: goals, starter: starter };
   });
   if (cleanEntries.filter(function(entry) { return entry.starter; }).length > MAX_STARTERS) throw apiError_('No puedes marcar más de ' + MAX_STARTERS + ' titulares.', 'VALIDATION');
 
@@ -424,7 +468,7 @@ function saveMatch_(input, session) {
     const id = Utilities.getUuid();
     const now = new Date();
     sheet_(SHEETS.MATCHES).appendRow([id, clean.date, clean.type, clean.opponent, clean.duration, now, now, 'cuerpo-tecnico']);
-    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.goals, entry.starter]; });
+    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.goals, entry.starter, entry.number || 0]; });
     const minutesSheet = ensureMatchMinutesSheet_();
     minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
     return {
@@ -459,18 +503,22 @@ function updateMatch_(matchId, input, expectedUpdatedAt, session) {
     const minuteIdIndex = minuteHeaders.indexOf('partido_id');
     const previousMinuteRows = [];
     const previousPlayerIds = {};
+    const previousNumbers = {};
     minuteValues.forEach(function(row, index) {
       if (index > 0 && String(row[minuteIdIndex]) === id) {
         previousMinuteRows.push(index + 1);
-        previousPlayerIds[String(row[minuteHeaders.indexOf('jugador_id')])] = true;
+        const playerId = String(row[minuteHeaders.indexOf('jugador_id')]);
+        previousPlayerIds[playerId] = true;
+        const snapshot = row[minuteHeaders.indexOf('dorsal')];
+        previousNumbers[playerId] = snapshot === '' ? undefined : Number(snapshot) || null;
       }
     });
-    const clean = validateMatch_(input, previousPlayerIds);
+    const clean = validateMatch_(input, previousPlayerIds, previousNumbers);
     const now = new Date(Math.max(Date.now(), new Date(previous[matchHeaders.indexOf('actualizado_en')]).getTime() + 1));
-    const newMinuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.goals, entry.starter]; });
+    const newMinuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.goals, entry.starter, entry.number || 0]; });
     const shared = Math.min(previousMinuteRows.length, newMinuteRows.length);
-    for (let index = 0; index < shared; index += 1) minutesSheet.getRange(previousMinuteRows[index], 1, 1, 6).setValues([newMinuteRows[index]]);
-    if (newMinuteRows.length > shared) minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, newMinuteRows.length - shared, 6).setValues(newMinuteRows.slice(shared));
+    for (let index = 0; index < shared; index += 1) minutesSheet.getRange(previousMinuteRows[index], 1, 1, 7).setValues([newMinuteRows[index]]);
+    if (newMinuteRows.length > shared) minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, newMinuteRows.length - shared, 7).setValues(newMinuteRows.slice(shared));
     for (let index = previousMinuteRows.length - 1; index >= shared; index -= 1) minutesSheet.deleteRow(previousMinuteRows[index]);
     const updatedRow = previous.slice();
     const updates = { fecha: clean.date, tipo: clean.type, rival: clean.opponent, duracion_minutos: clean.duration, actualizado_en: now };

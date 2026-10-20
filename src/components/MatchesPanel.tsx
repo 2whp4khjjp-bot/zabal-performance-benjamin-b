@@ -158,7 +158,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate }: Pro
           </div>
           <div className="match-player-list">
             {formPlayers.map((player) => <label className="match-player-row" key={player.id}>
-              <span className="match-player-number">{player.number ?? player.order}</span>
+              <span className="match-player-number">{editing?.minutes.find((entry) => entry.playerId === player.id)?.number ?? (editing?.minutes.some((entry) => entry.playerId === player.id) ? '—' : player.number ?? '—')}</span>
               <span className="match-player-name">{player.name}{!player.active && <small className="former-player-label"> · baja</small>}</span>
               <span className={`match-starter ${starterByPlayer[player.id] ? 'active' : ''}`}><input type="checkbox" checked={Boolean(starterByPlayer[player.id])} disabled={!starterByPlayer[player.id] && starterCount >= appConfig.maxStarters} onChange={(event) => { setStarterByPlayer((current) => ({ ...current, [player.id]: event.target.checked })); setErrors([]); }} aria-label={`Titular: ${player.name}`} /><Star size={16} /><small>Tit.</small></span>
               <span className="match-minutes-input"><input type="number" min="0" max={Number.isFinite(duration) ? duration : undefined} step="1" inputMode="numeric" value={minutesByPlayer[player.id] ?? ''} onChange={(event) => { setMinutesByPlayer((current) => ({ ...current, [player.id]: event.target.value })); setErrors([]); }} aria-label={`Minutos de ${player.name}`} placeholder="—" /><small>min</small></span>
@@ -177,7 +177,15 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate }: Pro
           </article>
           <article className="panel-card recent-matches-card">
             <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Registro</p><h2>Últimos partidos</h2></div><History /></div>
-            {matches.length ? <div className="recent-match-list">{matches.map((match) => <article className="recent-match-row" key={match.id}><span className={`match-type-icon match-type-icon--${match.type}`}><Trophy size={18} /></span><div><strong>{match.opponent}</strong><small>{match.date} · {typeLabel(match.type)} · {match.durationMinutes} min · {match.minutes.filter((item) => item.starter).length} titulares</small></div><span className="recent-match-goals"><strong>{match.minutes.reduce((sum, item) => sum + (item.goals ?? 0), 0)}</strong><small>goles</small></span><button type="button" className="button button--secondary match-edit-button" onClick={() => editMatch(match)} aria-label={`Editar partido contra ${match.opponent} del ${match.date}`}><Pencil size={16} /> Editar</button></article>)}</div> : <div className="empty-state compact"><Trophy size={30} /><h2>Todavía no hay partidos</h2><button className="text-button" onClick={() => setMode('new')}>Registrar el primero</button></div>}
+            {matches.length ? <div className="recent-match-list">{matches.map((match) => <article className="recent-match-row" key={match.id}>
+              <span className={`match-type-icon match-type-icon--${match.type}`}><Trophy size={18} /></span>
+              <div><strong>{match.opponent}</strong><small>{match.date} · {typeLabel(match.type)} · {match.durationMinutes} min · {match.minutes.filter((item) => item.starter).length} titulares</small></div>
+              <span className="recent-match-goals"><strong>{match.minutes.reduce((sum, item) => sum + (item.goals ?? 0), 0)}</strong><small>goles</small></span>
+              <button type="button" className="button button--secondary match-edit-button" onClick={() => editMatch(match)} aria-label={`Editar partido contra ${match.opponent} del ${match.date}`}><Pencil size={16} /> Editar</button>
+              <details className="match-history-detail"><summary>Ver acta y dorsales de este partido</summary>
+                <div className="table-scroll"><table><thead><tr><th>Dorsal</th><th>Jugador</th><th>Titular</th><th>Minutos</th><th>Goles</th></tr></thead><tbody>{match.minutes.map((entry) => <tr key={entry.playerId}><td>{entry.number ?? '—'}</td><td>{entry.playerName}</td><td>{entry.starter ? 'Sí' : 'No'}</td><td>{entry.minutes}</td><td>{entry.goals ?? 0}</td></tr>)}</tbody></table></div>
+              </details>
+            </article>)}</div> : <div className="empty-state compact"><Trophy size={30} /><h2>Todavía no hay partidos</h2><button className="text-button" onClick={() => setMode('new')}>Registrar el primero</button></div>}
           </article>
         </div>
       </section>}

@@ -25,7 +25,7 @@ const readJson = <T>(key: string, fallback: T): T => {
   } catch (error) {
     console.warn('No se pudo leer el almacenamiento local.', error);
   }
-  return fallback;
+  return JSON.parse(JSON.stringify(fallback)) as T;
 };
 
 const validateMatch = (input: MatchInput, players: Player[], previous?: MatchRecord) => {
@@ -38,6 +38,7 @@ const validateMatch = (input: MatchInput, players: Player[], previous?: MatchRec
   }
   const seen = new Set<string>();
   const previousIds = new Set(previous?.minutes.map((entry) => entry.playerId) ?? []);
+  const previousByPlayer = new Map(previous?.minutes.map((entry) => [entry.playerId, entry]) ?? []);
   const minutes = input.minutes.map((entry) => {
     const player = players.find((item) => item.id === entry.playerId && (item.active || previousIds.has(item.id)));
     if (!player || player.name !== entry.playerName || seen.has(entry.playerId)) throw new DataServiceError('Hay un jugador no válido o repetido.', 'INVALID_PLAYER');
@@ -47,7 +48,8 @@ const validateMatch = (input: MatchInput, players: Player[], previous?: MatchRec
     const goals = Number(entry.goals || 0);
     if (!Number.isInteger(goals) || goals < 0 || goals > 20) throw new DataServiceError(`Los goles de ${entry.playerName} no son válidos.`, 'VALIDATION');
     seen.add(entry.playerId);
-    return { playerId: player.id, playerName: player.name, minutes: entry.minutes, starter: Boolean(entry.starter), goals };
+    const formerNumber = previousByPlayer.get(player.id)?.number;
+    return { playerId: player.id, playerName: player.name, number: formerNumber === undefined ? player.number ?? null : formerNumber, minutes: entry.minutes, starter: Boolean(entry.starter), goals };
   });
   if (!minutes.length) throw new DataServiceError('Introduce los datos de al menos un jugador.', 'VALIDATION');
   if (minutes.filter((entry) => entry.starter).length > appConfig.maxStarters) throw new DataServiceError(`No puedes marcar más de ${appConfig.maxStarters} titulares.`, 'VALIDATION');
@@ -111,6 +113,26 @@ export class LocalDataService implements DataService {
     players.push(next);
     localStorage.setItem(PLAYERS_KEY, JSON.stringify(players));
     return next;
+  }
+
+  async updatePlayerNumber(token: string, playerId: string, number: number | undefined, expectedNumber: number | null | undefined): Promise<Player> {
+    const auth = this.requireSession(token);
+    if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede modificar la plantilla.', 'FORBIDDEN');
+    if (number !== undefined && (!Number.isInteger(number) || number < 1 || number > 99)) throw new DataServiceError('El dorsal debe estar entre 1 y 99.', 'VALIDATION');
+    const players = readJson(PLAYERS_KEY, demoPlayers);
+    const player = players.find((item) => item.id === playerId && item.active);
+    if (!player) throw new DataServiceError('El jugador ya no pertenece a la plantilla activa.', 'INVALID_PLAYER');
+    if ((player.number ?? null) !== (expectedNumber ?? null)) throw new DataServiceError('El dorsal ha cambiado. Recarga la página antes de editarlo.', 'CONFLICT');
+    if (number !== undefined && players.some((item) => item.active && item.id !== playerId && item.number === number)) throw new DataServiceError('Ese dorsal ya está asignado.', 'DUPLICATE_NUMBER');
+    if ((number ?? null) === (player.number ?? null)) return player;
+    const matches = readJson<MatchRecord[]>(MATCHES_KEY, []);
+    matches.forEach((match) => match.minutes.forEach((entry) => {
+      if (entry.playerId === playerId && entry.number === undefined) entry.number = player.number ?? null;
+    }));
+    localStorage.setItem(MATCHES_KEY, JSON.stringify(matches));
+    player.number = number;
+    localStorage.setItem(PLAYERS_KEY, JSON.stringify(players));
+    return player;
   }
 
   async removePlayer(token: string, playerId: string): Promise<boolean> {
@@ -218,7 +240,11 @@ export class LocalDataService implements DataService {
   async getMatches(token: string): Promise<MatchRecord[]> {
     const auth = this.requireSession(token);
     if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede consultar los partidos.', 'FORBIDDEN');
-    return readJson<MatchRecord[]>(MATCHES_KEY, []).sort((a, b) => `${b.date}${b.createdAt}`.localeCompare(`${a.date}${a.createdAt}`));
+    const players = readJson(PLAYERS_KEY, demoPlayers);
+    const numbers = new Map(players.map((player) => [player.id, player.number ?? null]));
+    return readJson<MatchRecord[]>(MATCHES_KEY, []).map((match) => ({ ...match, minutes: match.minutes.map((entry) => ({
+      ...entry, number: entry.number === undefined ? numbers.get(entry.playerId) ?? null : entry.number,
+    })) })).sort((a, b) => `${b.date}${b.createdAt}`.localeCompare(`${a.date}${a.createdAt}`));
   }
 
   async saveMatch(token: string, input: MatchInput): Promise<MatchRecord> {

@@ -318,19 +318,22 @@ tbody tr:hover { background: #f8fafc; }
 .match-form-summary span { display: inline-flex; align-items: center; gap: 7px; }
 .match-form-summary strong { color: var(--navy); }
 .match-minutes-card .validation-summary { margin-right: 0; margin-left: 0; }
-.match-save-bar { position: sticky; bottom: 0; z-index: 5; margin: 16px -22px 0; padding: 15px 22px; border-top: 1px solid var(--border); background: rgba(250,251,253,.96); backdrop-filter: blur(8px); }
+.match-save-bar { position: sticky; bottom: 0; z-index: 5; margin: 16px -22px 0; padding: 15px 22px; border-top: 1px solid var(--border); background: rgba(250,251,253,.96); backdrop-filter: blur(8px); display: flex; flex-wrap: wrap; gap: 10px; }
+.former-player-label { color: var(--muted); font-weight: 600; }
+.match-edit-button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .matches-history-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, .75fr); align-items: start; gap: 18px; }
 .count-badge--blue { color: #245f95; background: #e3eff9; }
 .match-totals-card { padding: 0; overflow: hidden; }
 .match-totals-card .panel-card__heading { margin: 0; padding: 20px 22px 14px; }
 .match-totals-card th { padding: 12px 13px; font-size: .74rem; font-weight: 800; }
 .recent-match-list { display: grid; }
-.recent-match-row { padding: 13px 0; border-top: 1px solid var(--border); display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 11px; }
+.recent-match-row { padding: 13px 0; border-top: 1px solid var(--border); display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto; align-items: center; gap: 11px; }
 .recent-match-row:first-child { border-top: 0; }
 .recent-match-row > div { min-width: 0; display: flex; flex-direction: column; }
 .recent-match-row > div strong { overflow: hidden; text-overflow: ellipsis; color: var(--navy); white-space: nowrap; }
 .recent-match-row small { margin-top: 3px; color: var(--muted); font-size: .72rem; }
 .recent-match-row > span:last-child { display: flex; flex-direction: column; align-items: flex-end; color: var(--navy); }
+.recent-match-row .recent-match-goals { display: flex; flex-direction: column; align-items: flex-end; color: var(--navy); }
 .match-type-icon { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; }
 .match-type-icon--official { color: #7b5b00; background: #fff0bc; }
 .match-type-icon--friendly { color: #245f95; background: #e3eff9; }
@@ -476,7 +479,10 @@ tbody tr:hover { background: #f8fafc; }
   .match-minutes-card { padding-right: 15px; padding-left: 15px; }
   .match-minutes-heading { align-items: flex-start; flex-direction: column; }
   .match-save-bar { margin-right: -15px; margin-left: -15px; padding-right: 15px; padding-left: 15px; }
+  .match-save-bar .button { width: 100%; }
   .match-form-summary { gap: 9px; flex-direction: column; }
+  .recent-match-row { grid-template-columns: 42px minmax(0, 1fr) auto; }
+  .match-edit-button { grid-column: 2 / -1; justify-self: end; }
   .attendance-toolbar > label { align-items: stretch; flex-direction: column; }
   .attendance-list { padding: 0 14px; }
   .attendance-row { padding: 13px 0; grid-template-columns: 36px minmax(0, 1fr); gap: 8px 10px; }

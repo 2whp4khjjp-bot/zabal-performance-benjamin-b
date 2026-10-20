@@ -99,4 +99,8 @@ export class GoogleSheetsDataService implements DataService {
   saveMatch(token: string, input: MatchInput) {
     return this.request<MatchRecord>('saveMatch', { token, match: input });
   }
+
+  updateMatch(token: string, matchId: string, input: MatchInput, expectedUpdatedAt: string) {
+    return this.request<MatchRecord>('updateMatch', { token, matchId, match: input, expectedUpdatedAt });
+  }
 }

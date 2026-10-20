@@ -28,6 +28,32 @@ const readJson = <T>(key: string, fallback: T): T => {
   return fallback;
 };
 
+const validateMatch = (input: MatchInput, players: Player[], previous?: MatchRecord) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new DataServiceError('La fecha del partido no es válida.', 'VALIDATION');
+  if (!['official', 'friendly'].includes(input.type)) throw new DataServiceError('El tipo de partido no es válido.', 'VALIDATION');
+  const opponent = input.opponent.replace(/[<>]/g, '').trim().slice(0, 100);
+  if (!opponent) throw new DataServiceError('Introduce el rival.', 'VALIDATION');
+  if (!Number.isInteger(input.durationMinutes) || input.durationMinutes < 1 || input.durationMinutes > 180) {
+    throw new DataServiceError('La duración del partido no es válida.', 'VALIDATION');
+  }
+  const seen = new Set<string>();
+  const previousIds = new Set(previous?.minutes.map((entry) => entry.playerId) ?? []);
+  const minutes = input.minutes.map((entry) => {
+    const player = players.find((item) => item.id === entry.playerId && (item.active || previousIds.has(item.id)));
+    if (!player || player.name !== entry.playerName || seen.has(entry.playerId)) throw new DataServiceError('Hay un jugador no válido o repetido.', 'INVALID_PLAYER');
+    if (!Number.isInteger(entry.minutes) || entry.minutes < 0 || entry.minutes > input.durationMinutes) {
+      throw new DataServiceError(`Los minutos de ${entry.playerName} no son válidos.`, 'VALIDATION');
+    }
+    const goals = Number(entry.goals || 0);
+    if (!Number.isInteger(goals) || goals < 0 || goals > 20) throw new DataServiceError(`Los goles de ${entry.playerName} no son válidos.`, 'VALIDATION');
+    seen.add(entry.playerId);
+    return { playerId: player.id, playerName: player.name, minutes: entry.minutes, starter: Boolean(entry.starter), goals };
+  });
+  if (!minutes.length) throw new DataServiceError('Introduce los datos de al menos un jugador.', 'VALIDATION');
+  if (minutes.filter((entry) => entry.starter).length > appConfig.maxStarters) throw new DataServiceError(`No puedes marcar más de ${appConfig.maxStarters} titulares.`, 'VALIDATION');
+  return { opponent, minutes };
+};
+
 export class LocalDataService implements DataService {
   private sessions = new Map<string, AuthSession>();
 
@@ -198,28 +224,8 @@ export class LocalDataService implements DataService {
   async saveMatch(token: string, input: MatchInput): Promise<MatchRecord> {
     const auth = this.requireSession(token);
     if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede guardar partidos.', 'FORBIDDEN');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new DataServiceError('La fecha del partido no es válida.', 'VALIDATION');
-    if (!['official', 'friendly'].includes(input.type)) throw new DataServiceError('El tipo de partido no es válido.', 'VALIDATION');
-    const opponent = input.opponent.replace(/[<>]/g, '').trim().slice(0, 100);
-    if (!opponent) throw new DataServiceError('Introduce el rival.', 'VALIDATION');
-    if (!Number.isInteger(input.durationMinutes) || input.durationMinutes < 1 || input.durationMinutes > 180) {
-      throw new DataServiceError('La duración del partido no es válida.', 'VALIDATION');
-    }
     const players = readJson(PLAYERS_KEY, demoPlayers);
-    const seen = new Set<string>();
-    const minutes = input.minutes.map((entry) => {
-      const player = players.find((item) => item.id === entry.playerId && item.active);
-      if (!player || player.name !== entry.playerName || seen.has(entry.playerId)) throw new DataServiceError('Hay un jugador no válido o repetido.', 'INVALID_PLAYER');
-      if (!Number.isInteger(entry.minutes) || entry.minutes < 0 || entry.minutes > input.durationMinutes) {
-        throw new DataServiceError(`Los minutos de ${entry.playerName} no son válidos.`, 'VALIDATION');
-      }
-      const goals = Number(entry.goals || 0);
-      if (!Number.isInteger(goals) || goals < 0 || goals > 20) throw new DataServiceError(`Los goles de ${entry.playerName} no son válidos.`, 'VALIDATION');
-      seen.add(entry.playerId);
-      return { playerId: player.id, playerName: player.name, minutes: entry.minutes, starter: Boolean(entry.starter), goals };
-    });
-    if (!minutes.length) throw new DataServiceError('Introduce los minutos de al menos un jugador.', 'VALIDATION');
-    if (minutes.filter((entry) => entry.starter).length > appConfig.maxStarters) throw new DataServiceError(`No puedes marcar más de ${appConfig.maxStarters} titulares.`, 'VALIDATION');
+    const { opponent, minutes } = validateMatch(input, players);
     const now = new Date().toISOString();
     const match: MatchRecord = {
       id: crypto.randomUUID(), date: input.date, type: input.type, opponent,
@@ -229,5 +235,21 @@ export class LocalDataService implements DataService {
     matches.push(match);
     localStorage.setItem(MATCHES_KEY, JSON.stringify(matches));
     return match;
+  }
+
+  async updateMatch(token: string, matchId: string, input: MatchInput, expectedUpdatedAt: string): Promise<MatchRecord> {
+    const auth = this.requireSession(token);
+    if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede modificar partidos.', 'FORBIDDEN');
+    const matches = readJson<MatchRecord[]>(MATCHES_KEY, []);
+    const index = matches.findIndex((match) => match.id === matchId);
+    if (index < 0) throw new DataServiceError('No se encontró el partido.', 'NOT_FOUND');
+    const previous = matches[index];
+    if (previous.updatedAt !== expectedUpdatedAt) throw new DataServiceError('Este partido ha cambiado. Recarga la página antes de editarlo.', 'CONFLICT');
+    const { opponent, minutes } = validateMatch(input, readJson(PLAYERS_KEY, demoPlayers), previous);
+    const updatedAt = new Date(Math.max(Date.now(), Date.parse(previous.updatedAt) + 1)).toISOString();
+    const updated: MatchRecord = { ...previous, date: input.date, type: input.type, opponent, durationMinutes: input.durationMinutes, minutes, updatedAt };
+    matches[index] = updated;
+    localStorage.setItem(MATCHES_KEY, JSON.stringify(matches));
+    return updated;
   }
 }

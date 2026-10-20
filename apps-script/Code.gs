@@ -68,7 +68,7 @@ function initializePlayerPins() {
 }
 
 function doGet() {
-  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 4 } });
+  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 5 } });
 }
 
 function doPost(event) {
@@ -89,6 +89,7 @@ function doPost(event) {
     if (action === 'saveAttendance') return json_({ ok: true, data: saveAttendance_(input.attendance, session) });
     if (action === 'getMatches') return json_({ ok: true, data: getMatches_(session) });
     if (action === 'saveMatch') return json_({ ok: true, data: saveMatch_(input.match, session) });
+    if (action === 'updateMatch') return json_({ ok: true, data: updateMatch_(input.matchId, input.match, input.expectedUpdatedAt, session) });
     throw apiError_('Acción no permitida.', 'INVALID_ACTION');
   } catch (error) {
     console.error(error && error.stack ? error.stack : error);
@@ -375,8 +376,7 @@ function getMatches_(session) {
   });
 }
 
-function saveMatch_(input, session) {
-  requireStaff_(session);
+function validateMatch_(input, previousPlayerIds) {
   if (!input) throw apiError_('Faltan los datos del partido.', 'VALIDATION');
   const date = String(input.date || '').trim();
   const type = String(input.type || '') === 'friendly' ? 'friendly' : String(input.type || '') === 'official' ? 'official' : '';
@@ -387,11 +387,15 @@ function saveMatch_(input, session) {
   if (!type) throw apiError_('El tipo de partido no es válido.', 'VALIDATION');
   if (!opponent) throw apiError_('Introduce el rival.', 'VALIDATION');
   if (!Number.isInteger(duration) || duration < 1 || duration > 180) throw apiError_('La duración del partido no es válida.', 'VALIDATION');
-  if (!entries.length) throw apiError_('Introduce los minutos de al menos un jugador.', 'VALIDATION');
+  if (!entries.length) throw apiError_('Introduce los datos de al menos un jugador.', 'VALIDATION');
 
   const players = getPlayers_({ role: 'staff' });
   const playersById = {};
   players.forEach(function(player) { playersById[player.id] = player; });
+  if (previousPlayerIds) rows_(SHEETS.PLAYERS).forEach(function(row) {
+    const id = String(row.id);
+    if (previousPlayerIds[id]) playersById[id] = { id: id, name: String(row.nombre) };
+  });
   const seen = {};
   const cleanEntries = entries.map(function(entry) {
     const playerId = String(entry.playerId || '');
@@ -407,18 +411,75 @@ function saveMatch_(input, session) {
   });
   if (cleanEntries.filter(function(entry) { return entry.starter; }).length > MAX_STARTERS) throw apiError_('No puedes marcar más de ' + MAX_STARTERS + ' titulares.', 'VALIDATION');
 
+  return { date: date, type: type, opponent: opponent, duration: duration, entries: cleanEntries };
+}
+
+function saveMatch_(input, session) {
+  requireStaff_(session);
+  const clean = validateMatch_(input);
+
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo en unos segundos.', 'BUSY');
   try {
     const id = Utilities.getUuid();
     const now = new Date();
-    sheet_(SHEETS.MATCHES).appendRow([id, date, type, opponent, duration, now, now, 'cuerpo-tecnico']);
-    const minuteRows = cleanEntries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.goals, entry.starter]; });
+    sheet_(SHEETS.MATCHES).appendRow([id, clean.date, clean.type, clean.opponent, clean.duration, now, now, 'cuerpo-tecnico']);
+    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.goals, entry.starter]; });
     const minutesSheet = ensureMatchMinutesSheet_();
     minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
     return {
-      id: id, date: date, type: type, opponent: opponent, durationMinutes: duration,
-      minutes: cleanEntries, createdAt: now.toISOString(), updatedAt: now.toISOString(), createdBy: 'cuerpo-tecnico',
+      id: id, date: clean.date, type: clean.type, opponent: clean.opponent, durationMinutes: clean.duration,
+      minutes: clean.entries, createdAt: now.toISOString(), updatedAt: now.toISOString(), createdBy: 'cuerpo-tecnico',
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function updateMatch_(matchId, input, expectedUpdatedAt, session) {
+  requireStaff_(session);
+  const id = String(matchId || '');
+  if (!id) throw apiError_('Falta el identificador del partido.', 'VALIDATION');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo en unos segundos.', 'BUSY');
+  try {
+    const matchSheet = sheet_(SHEETS.MATCHES);
+    const matchValues = matchSheet.getDataRange().getValues();
+    const matchHeaders = matchValues[0].map(String);
+    const matchIndex = matchHeaders.indexOf('id');
+    const matchRowIndex = matchValues.findIndex(function(row, index) { return index > 0 && String(row[matchIndex]) === id; });
+    if (matchRowIndex < 0) throw apiError_('No se encontró el partido.', 'NOT_FOUND');
+    const previous = matchValues[matchRowIndex];
+    if (iso_(previous[matchHeaders.indexOf('actualizado_en')]) !== String(expectedUpdatedAt || '')) {
+      throw apiError_('Este partido ha cambiado. Recarga la página antes de editarlo.', 'CONFLICT');
+    }
+    const minutesSheet = ensureMatchMinutesSheet_();
+    const minuteValues = minutesSheet.getDataRange().getValues();
+    const minuteHeaders = minuteValues[0].map(String);
+    const minuteIdIndex = minuteHeaders.indexOf('partido_id');
+    const previousMinuteRows = [];
+    const previousPlayerIds = {};
+    minuteValues.forEach(function(row, index) {
+      if (index > 0 && String(row[minuteIdIndex]) === id) {
+        previousMinuteRows.push(index + 1);
+        previousPlayerIds[String(row[minuteHeaders.indexOf('jugador_id')])] = true;
+      }
+    });
+    const clean = validateMatch_(input, previousPlayerIds);
+    const now = new Date(Math.max(Date.now(), new Date(previous[matchHeaders.indexOf('actualizado_en')]).getTime() + 1));
+    const newMinuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.goals, entry.starter]; });
+    const shared = Math.min(previousMinuteRows.length, newMinuteRows.length);
+    for (let index = 0; index < shared; index += 1) minutesSheet.getRange(previousMinuteRows[index], 1, 1, 6).setValues([newMinuteRows[index]]);
+    if (newMinuteRows.length > shared) minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, newMinuteRows.length - shared, 6).setValues(newMinuteRows.slice(shared));
+    for (let index = previousMinuteRows.length - 1; index >= shared; index -= 1) minutesSheet.deleteRow(previousMinuteRows[index]);
+    const updatedRow = previous.slice();
+    const updates = { fecha: clean.date, tipo: clean.type, rival: clean.opponent, duracion_minutos: clean.duration, actualizado_en: now };
+    Object.keys(updates).forEach(function(key) { updatedRow[matchHeaders.indexOf(key)] = updates[key]; });
+    matchSheet.getRange(matchRowIndex + 1, 1, 1, updatedRow.length).setValues([updatedRow]);
+    return {
+      id: id, date: clean.date, type: clean.type, opponent: clean.opponent, durationMinutes: clean.duration,
+      minutes: clean.entries, createdAt: iso_(previous[matchHeaders.indexOf('creado_en')]), updatedAt: now.toISOString(),
+      createdBy: String(previous[matchHeaders.indexOf('creado_por')] || 'cuerpo-tecnico'),
     };
   } finally {
     lock.releaseLock();

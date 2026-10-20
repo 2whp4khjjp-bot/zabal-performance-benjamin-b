@@ -39,6 +39,26 @@ describe('servicio local', () => {
 
     await expect(service.authenticate('1001', 'player')).rejects.toThrow('cuerpo técnico');
   });
+  it('edita un partido anterior sin duplicarlo y conserva el historial de una baja', async () => {
+    const service = new LocalDataService();
+    const staff = await service.authenticate('2026', 'staff');
+    const player = await service.addPlayer(staff.token, { name: 'Jugador para corregir', number: 26 });
+    const saved = await service.saveMatch(staff.token, {
+      date: '2026-09-01', type: 'official', opponent: 'Rival original', durationMinutes: 60,
+      minutes: [{ playerId: player.id, playerName: player.name, minutes: 40, starter: true, goals: 1 }],
+    });
+    await service.removePlayer(staff.token, player.id);
+    const corrected = await service.updateMatch(staff.token, saved.id, {
+      date: '2026-09-02', type: 'friendly', opponent: 'Rival corregido', durationMinutes: 50,
+      minutes: [{ playerId: player.id, playerName: player.name, minutes: 35, starter: false, goals: 2 }],
+    }, saved.updatedAt);
+    expect(corrected).toMatchObject({ id: saved.id, date: '2026-09-02', type: 'friendly', opponent: 'Rival corregido', durationMinutes: 50 });
+    expect((await service.getMatches(staff.token))).toHaveLength(1);
+    expect((await service.getMatches(staff.token))[0].minutes[0]).toMatchObject({ minutes: 35, starter: false, goals: 2 });
+    await expect(service.updateMatch(staff.token, saved.id, {
+      date: '2026-09-02', type: 'friendly', opponent: 'Duplicado', durationMinutes: 50, minutes: corrected.minutes,
+    }, saved.updatedAt)).rejects.toThrow('ha cambiado');
+  });
   it('añade y da de baja jugadores sin perder el registro', async () => {
     const service = new LocalDataService();
     const staff = await service.authenticate('2026', 'staff');

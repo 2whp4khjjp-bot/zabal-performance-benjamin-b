@@ -14,6 +14,7 @@ export interface DataService {
   saveAttendance(token: string, input: AttendanceInput): Promise<AttendanceRecord[]>;
   getMatches(token: string): Promise<MatchRecord[]>;
   saveMatch(token: string, input: MatchInput): Promise<MatchRecord>;
+  updateMatch(token: string, matchId: string, input: MatchInput, expectedUpdatedAt: string): Promise<MatchRecord>;
 }
 
 export class DataServiceError extends Error {

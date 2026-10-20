@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays, Clock3, Goal, History, Save, Star, Trophy, UsersRound } from 'lucide-react';
+import { CalendarDays, Clock3, Goal, History, Pencil, Save, Star, Trophy, UsersRound } from 'lucide-react';
 import type { MatchInput, MatchRecord, MatchType, Player } from '../types';
 import { todayKey } from '../utils/date';
 import { appConfig } from '../config';
@@ -11,12 +11,14 @@ type Props = {
   matches: MatchRecord[];
   saving: boolean;
   onSave: (input: MatchInput) => Promise<boolean>;
+  onUpdate: (match: MatchRecord, input: MatchInput) => Promise<boolean>;
 };
 
 const typeLabel = (type: MatchType) => type === 'official' ? 'Oficial' : 'Amistoso';
 
-export function MatchesPanel({ players, matches, saving, onSave }: Props) {
+export function MatchesPanel({ players, matches, saving, onSave, onUpdate }: Props) {
   const [mode, setMode] = useState<'new' | 'history'>('new');
+  const [editing, setEditing] = useState<MatchRecord | null>(null);
   const [date, setDate] = useState(todayKey());
   const [type, setType] = useState<MatchType>('official');
   const [opponent, setOpponent] = useState('');
@@ -27,16 +29,55 @@ export function MatchesPanel({ players, matches, saving, onSave }: Props) {
   const [starterByPlayer, setStarterByPlayer] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<string[]>([]);
 
+  const formPlayers = useMemo(() => {
+    if (!editing) return players;
+    const known = new Set(players.map((player) => player.id));
+    const formerPlayers: Player[] = editing.minutes.filter((entry) => !known.has(entry.playerId)).map((entry, index) => ({
+      id: entry.playerId, name: entry.playerName, active: false, order: players.length + index + 1, joinedAt: '',
+    }));
+    return [...players, ...formerPlayers];
+  }, [players, editing]);
+
+  const resetForm = () => {
+    setEditing(null);
+    setDate(todayKey());
+    setType('official');
+    setOpponent('');
+    setDurationOption('90');
+    setCustomDuration('90');
+    setMinutesByPlayer({});
+    setGoalsByPlayer({});
+    setStarterByPlayer({});
+    setErrors([]);
+  };
+
+  const editMatch = (match: MatchRecord) => {
+    setEditing(match);
+    setDate(match.date);
+    setType(match.type);
+    setOpponent(match.opponent);
+    const value = String(match.durationMinutes);
+    setDurationOption(durationOptions.some((option) => String(option) === value) ? value : 'custom');
+    setCustomDuration(value);
+    setMinutesByPlayer(Object.fromEntries(match.minutes.map((entry) => [entry.playerId, String(entry.minutes)])));
+    setGoalsByPlayer(Object.fromEntries(match.minutes.map((entry) => [entry.playerId, String(entry.goals ?? 0)])));
+    setStarterByPlayer(Object.fromEntries(match.minutes.map((entry) => [entry.playerId, Boolean(entry.starter)])));
+    setErrors([]);
+    setMode('new');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const duration = durationOption === 'custom' ? Number(customDuration) : Number(durationOption);
   const enteredValues = Object.values(minutesByPlayer).filter((value) => value !== '');
-  const enteredCount = players.filter((player) => (minutesByPlayer[player.id] ?? '') !== '' || Boolean(starterByPlayer[player.id]) || Number(goalsByPlayer[player.id] || 0) > 0).length;
+  const enteredCount = formPlayers.filter((player) => (minutesByPlayer[player.id] ?? '') !== '' || Boolean(starterByPlayer[player.id]) || Number(goalsByPlayer[player.id] || 0) > 0).length;
   const totalEnteredMinutes = enteredValues.reduce((sum, value) => sum + (Number(value) || 0), 0);
-  const starterCount = players.filter((player) => starterByPlayer[player.id]).length;
+  const starterCount = formPlayers.filter((player) => starterByPlayer[player.id]).length;
 
   const totals = useMemo(() => {
     const byPlayer = new Map<string, { player: Player; appearances: number; starts: number; minutes: number; goals: number }>();
     players.forEach((player) => byPlayer.set(player.id, { player, appearances: 0, starts: 0, minutes: 0, goals: 0 }));
     matches.forEach((match) => match.minutes.forEach((entry) => {
+      if (!byPlayer.has(entry.playerId)) byPlayer.set(entry.playerId, { player: { id: entry.playerId, name: entry.playerName, active: false, order: Number.MAX_SAFE_INTEGER, joinedAt: '' }, appearances: 0, starts: 0, minutes: 0, goals: 0 });
       const total = byPlayer.get(entry.playerId);
       if (!total) return;
       total.minutes += entry.minutes;
@@ -52,9 +93,9 @@ export function MatchesPanel({ players, matches, saving, onSave }: Props) {
     if (!date) next.push('Selecciona la fecha del partido.');
     if (!opponent.trim()) next.push('Introduce el rival.');
     if (!Number.isInteger(duration) || duration < 1 || duration > 180) next.push('La duración debe estar entre 1 y 180 minutos.');
-    if (!enteredCount) next.push('Introduce los minutos de al menos un jugador.');
+    if (!enteredCount) next.push('Introduce los datos de al menos un jugador.');
     if (starterCount > appConfig.maxStarters) next.push(`Puedes marcar como máximo ${appConfig.maxStarters} titulares.`);
-    players.forEach((player) => {
+    formPlayers.forEach((player) => {
       const raw = minutesByPlayer[player.id];
       const hasEntry = (raw ?? '') !== '' || Boolean(starterByPlayer[player.id]) || Number(goalsByPlayer[player.id] || 0) > 0;
       if (!hasEntry) return;
@@ -75,19 +116,15 @@ export function MatchesPanel({ players, matches, saving, onSave }: Props) {
       type,
       opponent: opponent.trim(),
       durationMinutes: duration,
-      minutes: players.flatMap((player) => {
+      minutes: formPlayers.flatMap((player) => {
         const raw = minutesByPlayer[player.id];
         const goals = Number(goalsByPlayer[player.id] || 0);
         const starter = Boolean(starterByPlayer[player.id]);
         return (raw === undefined || raw === '') && !starter && goals === 0 ? [] : [{ playerId: player.id, playerName: player.name, minutes: Number(raw || 0), starter, goals }];
       }),
     };
-    if (await onSave(input)) {
-      setOpponent('');
-      setMinutesByPlayer({});
-      setGoalsByPlayer({});
-      setStarterByPlayer({});
-      setErrors([]);
+    if (await (editing ? onUpdate(editing, input) : onSave(input))) {
+      resetForm();
       setMode('history');
     }
   };
@@ -97,14 +134,14 @@ export function MatchesPanel({ players, matches, saving, onSave }: Props) {
       <div className="page-heading matches-heading">
         <div><p className="eyebrow eyebrow--dark">Control de competición</p><h1>Partidos y actas</h1><p>Registra minutos, titularidades y goles de la plantilla.</p></div>
         <div className="matches-switch" role="tablist" aria-label="Vista de partidos">
-          <button className={mode === 'new' ? 'active' : ''} onClick={() => setMode('new')} role="tab" aria-selected={mode === 'new'}><Trophy size={18} /> Nuevo partido</button>
+          <button className={mode === 'new' && !editing ? 'active' : ''} onClick={() => { resetForm(); setMode('new'); }} role="tab" aria-selected={mode === 'new' && !editing}><Trophy size={18} /> Nuevo partido</button>
           <button className={mode === 'history' ? 'active' : ''} onClick={() => setMode('history')} role="tab" aria-selected={mode === 'history'}><History size={18} /> Historial</button>
         </div>
       </div>
 
       {mode === 'new' ? <form className="match-form" onSubmit={(event) => void submit(event)} noValidate>
         <section className="panel-card match-details-card">
-          <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Datos del encuentro</p><h2>Nuevo partido</h2></div><CalendarDays /></div>
+          <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Datos del encuentro</p><h2>{editing ? `Editar partido · ${editing.opponent}` : 'Nuevo partido'}</h2></div><CalendarDays /></div>
           <div className="match-fields">
             <label>Fecha<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
             <label>Tipo<select value={type} onChange={(event) => setType(event.target.value as MatchType)}><option value="official">Oficial</option><option value="friendly">Amistoso</option></select></label>
@@ -120,9 +157,9 @@ export function MatchesPanel({ players, matches, saving, onSave }: Props) {
             <span className="duration-badge"><Clock3 size={16} /> Máximo {Number.isFinite(duration) ? duration : '—'}</span>
           </div>
           <div className="match-player-list">
-            {players.map((player) => <label className="match-player-row" key={player.id}>
+            {formPlayers.map((player) => <label className="match-player-row" key={player.id}>
               <span className="match-player-number">{player.number ?? player.order}</span>
-              <span className="match-player-name">{player.name}</span>
+              <span className="match-player-name">{player.name}{!player.active && <small className="former-player-label"> · baja</small>}</span>
               <span className={`match-starter ${starterByPlayer[player.id] ? 'active' : ''}`}><input type="checkbox" checked={Boolean(starterByPlayer[player.id])} disabled={!starterByPlayer[player.id] && starterCount >= appConfig.maxStarters} onChange={(event) => { setStarterByPlayer((current) => ({ ...current, [player.id]: event.target.checked })); setErrors([]); }} aria-label={`Titular: ${player.name}`} /><Star size={16} /><small>Tit.</small></span>
               <span className="match-minutes-input"><input type="number" min="0" max={Number.isFinite(duration) ? duration : undefined} step="1" inputMode="numeric" value={minutesByPlayer[player.id] ?? ''} onChange={(event) => { setMinutesByPlayer((current) => ({ ...current, [player.id]: event.target.value })); setErrors([]); }} aria-label={`Minutos de ${player.name}`} placeholder="—" /><small>min</small></span>
               <span className="match-goal-input"><Goal size={16} /><input type="number" min="0" max="20" step="1" inputMode="numeric" value={goalsByPlayer[player.id] ?? ''} onChange={(event) => { setGoalsByPlayer((current) => ({ ...current, [player.id]: event.target.value })); setErrors([]); }} aria-label={`Goles de ${player.name}`} placeholder="0" /></span>
@@ -130,7 +167,7 @@ export function MatchesPanel({ players, matches, saving, onSave }: Props) {
           </div>
           <div className="match-form-summary"><span><UsersRound size={17} /> <strong>{enteredCount}</strong> jugadores incluidos</span><span><Star size={17} /> <strong>{starterCount}/{appConfig.maxStarters}</strong> titulares</span><span><Clock3 size={17} /> <strong>{totalEnteredMinutes}</strong> minutos acumulados</span></div>
           {errors.length > 0 && <div className="validation-summary" role="alert"><strong>No se puede guardar todavía:</strong><ul>{errors.map((error) => <li key={error}>{error}</li>)}</ul></div>}
-          <div className="match-save-bar"><button className="button button--primary button--wide" disabled={saving} type="submit"><Save size={19} /> {saving ? 'Guardando…' : 'Guardar acta'}</button></div>
+          <div className="match-save-bar"><button className="button button--primary button--wide" disabled={saving} type="submit"><Save size={19} /> {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Guardar acta'}</button>{editing && <button className="button button--secondary" disabled={saving} type="button" onClick={() => { resetForm(); setMode('history'); }}>Cancelar</button>}</div>
         </section>
       </form> : <section className="matches-history" aria-label="Historial de partidos">
         <div className="matches-history-grid">
@@ -140,7 +177,7 @@ export function MatchesPanel({ players, matches, saving, onSave }: Props) {
           </article>
           <article className="panel-card recent-matches-card">
             <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Registro</p><h2>Últimos partidos</h2></div><History /></div>
-            {matches.length ? <div className="recent-match-list">{matches.map((match) => <article className="recent-match-row" key={match.id}><span className={`match-type-icon match-type-icon--${match.type}`}><Trophy size={18} /></span><div><strong>{match.opponent}</strong><small>{match.date} · {typeLabel(match.type)} · {match.durationMinutes} min · {match.minutes.filter((item) => item.starter).length} titulares</small></div><span><strong>{match.minutes.reduce((sum, item) => sum + (item.goals ?? 0), 0)}</strong><small>goles</small></span></article>)}</div> : <div className="empty-state compact"><Trophy size={30} /><h2>Todavía no hay partidos</h2><button className="text-button" onClick={() => setMode('new')}>Registrar el primero</button></div>}
+            {matches.length ? <div className="recent-match-list">{matches.map((match) => <article className="recent-match-row" key={match.id}><span className={`match-type-icon match-type-icon--${match.type}`}><Trophy size={18} /></span><div><strong>{match.opponent}</strong><small>{match.date} · {typeLabel(match.type)} · {match.durationMinutes} min · {match.minutes.filter((item) => item.starter).length} titulares</small></div><span className="recent-match-goals"><strong>{match.minutes.reduce((sum, item) => sum + (item.goals ?? 0), 0)}</strong><small>goles</small></span><button type="button" className="button button--secondary match-edit-button" onClick={() => editMatch(match)} aria-label={`Editar partido contra ${match.opponent} del ${match.date}`}><Pencil size={16} /> Editar</button></article>)}</div> : <div className="empty-state compact"><Trophy size={30} /><h2>Todavía no hay partidos</h2><button className="text-button" onClick={() => setMode('new')}>Registrar el primero</button></div>}
           </article>
         </div>
       </section>}

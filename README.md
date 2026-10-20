@@ -122,6 +122,8 @@ En **Panel técnico**:
 
 Los PDF se generan en el navegador con tablas A4; no necesitan abrir Google Sheets.
 
+En **Partidos → Historial**, el selector permite ordenar los acumulados por dorsal, minutos o goles. **Descargar PDF** genera el informe de minutos con ese mismo orden, incluyendo partidos, titularidades, minutos y goles.
+
 ## Despliegue y subdominio
 
 La configuración recomendada para este proyecto es GitHub Pages mediante el flujo incluido en `.github/workflows/deploy-pages.yml`. Consulte la guía paso a paso en `docs/DESPLIEGUE_GITHUB.md`.

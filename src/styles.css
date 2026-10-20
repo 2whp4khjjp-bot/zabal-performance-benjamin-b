@@ -333,6 +333,8 @@ tbody tr:hover { background: #f8fafc; }
 .match-sort-control { padding: 0 22px 16px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: .82rem; font-weight: 700; }
 .match-sort-control select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: white; color: var(--navy); font: inherit; }
 .match-sort-control--form { padding: 0 0 15px; }
+.match-pdf-button { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; }
+.match-pdf-error { margin: 0 22px 12px; color: #a13838; font-size: .82rem; }
 .matches-history-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, .75fr); align-items: start; gap: 18px; }
 .count-badge--blue { color: #245f95; background: #e3eff9; }
 .match-totals-card { padding: 0; overflow: hidden; }

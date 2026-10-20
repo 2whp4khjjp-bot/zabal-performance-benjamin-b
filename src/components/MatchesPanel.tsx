@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays, Clock3, Goal, History, Pencil, Save, Star, Trash2, Trophy, UsersRound } from 'lucide-react';
+import { CalendarDays, Clock3, FileDown, Goal, History, Pencil, Save, Star, Trash2, Trophy, UsersRound } from 'lucide-react';
 import type { MatchInput, MatchRecord, MatchType, Player } from '../types';
 import { todayKey } from '../utils/date';
 import { appConfig } from '../config';
 import { sortMatchStats, type MatchSort } from '../utils/matchSort';
+import { downloadMatchMinutesPdf } from '../services/matchMinutesPdf';
 
 const durationOptions = [40, 50, 60, 70, 80, 90] as const;
 
@@ -32,6 +33,8 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
   const [goalsByPlayer, setGoalsByPlayer] = useState<Record<string, string>>({});
   const [starterByPlayer, setStarterByPlayer] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<string[]>([]);
+  const [pdfError, setPdfError] = useState('');
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const formPlayers = useMemo(() => {
     if (!editing) return players;
@@ -97,6 +100,18 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
     }));
     return sortMatchStats([...byPlayer.values()].filter((item) => item.appearances || item.starts || item.minutes || item.goals).map((item) => ({ ...item, number: item.player.number, name: item.player.name })), sortBy);
   }, [matches, players, sortBy]);
+
+  const exportMinutesPdf = async () => {
+    setPdfError('');
+    setExportingPdf(true);
+    try {
+      await downloadMatchMinutesPdf({ totals, matches, sortBy });
+    } catch {
+      setPdfError('No se pudo generar el PDF. Inténtalo de nuevo.');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   const validate = () => {
     const next: string[] = [];
@@ -184,7 +199,8 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
         <div className="matches-history-grid">
           <article className="panel-card match-totals-card">
             <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Temporada</p><h2>Totales por jugador</h2></div><span className="count-badge count-badge--blue">{matches.length}</span></div>
-            <div className="match-sort-control"><label htmlFor="match-sort">Ordenar jugadores por</label><select id="match-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as MatchSort)}><option value="number">Dorsal</option><option value="minutes">Minutos</option><option value="goals">Goles</option></select></div>
+            <div className="match-sort-control"><label htmlFor="match-sort">Ordenar jugadores por</label><select id="match-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as MatchSort)}><option value="number">Dorsal</option><option value="minutes">Minutos</option><option value="goals">Goles</option></select><button type="button" className="button button--secondary match-pdf-button" disabled={!totals.length || exportingPdf} onClick={() => void exportMinutesPdf()}><FileDown size={17} /> {exportingPdf ? 'Generando…' : 'Descargar PDF'}</button></div>
+            {pdfError && <p className="match-pdf-error" role="alert">{pdfError}</p>}
             {totals.length ? <div className="table-scroll"><table><thead><tr><th>Dorsal</th><th>Jugador</th><th>Partidos</th><th>Tit.</th><th>Minutos</th><th>Goles</th></tr></thead><tbody>{totals.map((item) => <tr key={item.player.id}><td>{item.player.number ?? '—'}</td><td><strong>{item.player.name}</strong></td><td>{item.appearances}</td><td>{item.starts}</td><td><strong>{item.minutes}</strong></td><td><strong>{item.goals}</strong></td></tr>)}</tbody></table></div> : <div className="empty-state compact"><UsersRound size={30} /><h2>Sin minutos registrados</h2><p>Los totales aparecerán después de guardar el primer partido.</p></div>}
           </article>
           <article className="panel-card recent-matches-card">

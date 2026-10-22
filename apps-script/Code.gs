@@ -78,6 +78,9 @@ function doPost(event) {
     if (action === 'authenticate') return json_({ ok: true, data: authenticate_(input.pin, input.role) });
     if (action === 'logout') return json_({ ok: true, data: logout_(input.token) });
     const session = requireSession_(input.token);
+    if (action === 'getTeamSettings') return json_({ ok: true, data: getTeamSettings_() });
+    if (action === 'saveTeamSettings') return json_({ ok: true, data: saveTeamSettings_(input.settings, session) });
+    if (action === 'emailAttendance') return json_({ ok: true, data: emailAttendance_(input, session) });
     if (action === 'getBootstrap') return json_({ ok: true, data: getBootstrap_(session) });
     if (action === 'getPlayers') return json_({ ok: true, data: getPlayers_(session) });
     if (action === 'addPlayer') return json_({ ok: true, data: addPlayer_(input.player, session) });
@@ -88,9 +91,9 @@ function doPost(event) {
     if (action === 'saveMeasurement') return json_({ ok: true, data: saveMeasurement_(input.measurement, session) });
     if (action === 'getAttendance') return json_({ ok: true, data: getAttendance_(session) });
     if (action === 'saveAttendance') return json_({ ok: true, data: saveAttendance_(input.attendance, session) });
-    if (action === 'getMatches') return json_({ ok: true, data: getMatches_(session) });
-    if (action === 'saveMatch') return json_({ ok: true, data: saveMatch_(input.match, session) });
-    if (action === 'updateMatch') return json_({ ok: true, data: updateMatch_(input.matchId, input.match, input.expectedUpdatedAt, session) });
+    if (action === 'getMatches') return json_({ ok: true, data: enrichMatchesWithDetails_(getMatches_(session)) });
+    if (action === 'saveMatch') return json_({ ok: true, data: saveMatchWithDetails_(input.match, session) });
+    if (action === 'updateMatch') return json_({ ok: true, data: updateMatchWithDetails_(input.matchId, input.match, input.expectedUpdatedAt, session) });
     if (action === 'deleteMatch') return json_({ ok: true, data: deleteMatch_(input.matchId, input.expectedUpdatedAt, session) });
     throw apiError_('Acción no permitida.', 'INVALID_ACTION');
   } catch (error) {
@@ -463,7 +466,7 @@ function validateMatch_(input, previousPlayerIds, previousNumbers) {
     const previousNumber = previousNumbers && Object.prototype.hasOwnProperty.call(previousNumbers, playerId) ? previousNumbers[playerId] : undefined;
     return { playerId: player.id, playerName: player.name, number: previousNumber === undefined ? player.number || null : previousNumber, minutes: minutes, goals: goals, starter: starter };
   });
-  if (cleanEntries.filter(function(entry) { return entry.starter; }).length > MAX_STARTERS) throw apiError_('No puedes marcar más de ' + MAX_STARTERS + ' titulares.', 'VALIDATION');
+  if (cleanEntries.filter(function(entry) { return entry.starter; }).length > (getTeamSettings_().profile === 'football7' ? 7 : 11)) throw apiError_('No puedes marcar más de ' + (getTeamSettings_().profile === 'football7' ? 7 : 11) + ' titulares.', 'VALIDATION');
 
   return { date: date, type: type, opponent: opponent, duration: duration, entries: cleanEntries };
 }
@@ -797,3 +800,86 @@ function hasValue_(value) { return value !== '' && value !== null && value !== u
 function blankIfUndefined_(value) { return value === undefined ? '' : value; }
 function apiError_(message, code) { const error = new Error(message); error.code = code; return error; }
 function json_(value) { return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON); }
+
+
+function defaultTeamSettings_() { return { profile: 'football7', weight: true, fatigue: true, soreness: true, injuries: true, attendance: true, matches: true, cards: true }; }
+function getTeamSettings_() {
+  const raw = PropertiesService.getScriptProperties().getProperty('TEAM_FEATURES_V1');
+  if (!raw) return defaultTeamSettings_();
+  try { return Object.assign(defaultTeamSettings_(), JSON.parse(raw)); } catch (error) { return defaultTeamSettings_(); }
+}
+function saveTeamSettings_(input, session) {
+  requireStaff_(session);
+  if (!input || ['football7', 'football11'].indexOf(input.profile) < 0) throw apiError_('Selecciona un perfil válido.', 'VALIDATION');
+  const next = defaultTeamSettings_(); next.profile = input.profile;
+  ['weight', 'fatigue', 'soreness', 'injuries', 'attendance', 'matches', 'cards'].forEach(function(key) { if (typeof input[key] !== 'boolean') throw apiError_('Configuración no válida.', 'VALIDATION'); next[key] = input[key]; });
+  PropertiesService.getScriptProperties().setProperty('TEAM_FEATURES_V1', JSON.stringify(next));
+  return next;
+}
+function ensureMatchDetailsSheet_() {
+  const spreadsheet = SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID'));
+  const name = 'Detalles partidos';
+  let target = spreadsheet.getSheetByName(name);
+  if (!target) { ensureSheet_(spreadsheet, name, ['partido_id', 'arbitro', 'goles_zabal', 'goles_rival', 'incidencias', 'capitan_id']); target = spreadsheet.getSheetByName(name); }
+  return target;
+}
+function cleanMatchDetails_(input) {
+  const score = function(value) { if (value === undefined || value === null || value === '') return undefined; const n = Number(value); if (!Number.isInteger(n) || n < 0 || n > 99) throw apiError_('El resultado debe contener goles entre 0 y 99.', 'VALIDATION'); return n; };
+  const details = { referee: String(input.referee || '').replace(/[<>]/g, '').trim().slice(0,120), goalsFor: score(input.goalsFor), goalsAgainst: score(input.goalsAgainst), incidents: String(input.incidents || '').replace(/[<>]/g, '').trim().slice(0,3000), captainId: String(input.captainId || '').slice(0,100) };
+  if ((details.goalsFor === undefined) !== (details.goalsAgainst === undefined)) throw apiError_('Completa los dos marcadores o deja ambos vacíos.', 'VALIDATION');
+  if (details.captainId && !(input.minutes || []).some(function(entry) { return String(entry.playerId) === details.captainId && entry.calledUp !== false; })) throw apiError_('El capitán debe estar en la convocatoria del partido.', 'VALIDATION');
+  return details;
+}
+function matchDetailsFromRow_(row) { return { referee: String(row[1] || ''), goalsFor: row[2] === '' ? undefined : Number(row[2]), goalsAgainst: row[3] === '' ? undefined : Number(row[3]), incidents: String(row[4] || ''), captainId: String(row[5] || '') }; }
+function enrichMatchesWithDetails_(matches) {
+  const rows = ensureMatchDetailsSheet_().getDataRange().getValues().slice(1); const detailsById = {};
+  rows.forEach(function(row) { detailsById[String(row[0])] = matchDetailsFromRow_(row); });
+  return matches.map(function(match) { return Object.assign(match, detailsById[match.id] || {}); });
+}
+function persistMatchDetails_(match, details) {
+  const lock = LockService.getScriptLock(); if (!lock.tryLock(15000)) throw apiError_('El partido se guardó pero faltan sus detalles. Edita el partido para completarlos.', 'BUSY');
+  try {
+    const target = ensureMatchDetailsSheet_(); const values = target.getDataRange().getValues();
+    const index = values.findIndex(function(row, i) { return i > 0 && String(row[0]) === match.id; });
+    const row = [match.id, details.referee, details.goalsFor === undefined ? '' : details.goalsFor, details.goalsAgainst === undefined ? '' : details.goalsAgainst, details.incidents, details.captainId];
+    if (index > 0) target.getRange(index + 1, 1, 1, row.length).setValues([row]); else target.appendRow(row);
+    return Object.assign(match, details);
+  } finally { lock.releaseLock(); }
+}
+function saveMatchWithDetails_(input, session) {
+  requireStaff_(session); const details = cleanMatchDetails_(input); const requestId = String(input.requestId || '');
+  const properties = PropertiesService.getScriptProperties(); const key = 'MATCH_REQUEST_' + sha256_(requestId);
+  const userLock = LockService.getUserLock(); if (!userLock.tryLock(30000)) throw apiError_('Hay otro guardado en curso.', 'BUSY');
+  try {
+    const previousId = requestId ? properties.getProperty(key) : '';
+    const previous = previousId ? getMatches_(session).find(function(match) { return match.id === previousId; }) : null;
+    const saved = previous || saveMatch_(input, session);
+    if (requestId) properties.setProperty(key, saved.id);
+    return persistMatchDetails_(saved, details);
+  } finally { userLock.releaseLock(); }
+}
+function updateMatchWithDetails_(matchId, input, expectedUpdatedAt, session) { requireStaff_(session); const details = cleanMatchDetails_(input); return persistMatchDetails_(updateMatch_(matchId, input, expectedUpdatedAt, session), details); }
+function emailAttendance_(input, session) {
+  requireStaff_(session);
+  const email = String(input.email || '').trim();
+  const pdf = String(input.pdfBase64 || '');
+  const requestId = String(input.requestId || '');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw apiError_('Introduce un correo válido.', 'VALIDATION');
+  if (!/^[a-zA-Z0-9-]{16,80}$/.test(requestId)) throw apiError_('Solicitud de correo no válida.', 'VALIDATION');
+  if (pdf.length > 2800000 || !/^JVBER[a-zA-Z0-9+/=\r\n]+$/.test(pdf)) throw apiError_('El archivo PDF no es válido o es demasiado grande.', 'VALIDATION');
+  const lock = LockService.getScriptLock(); if (!lock.tryLock(15000)) throw apiError_('Hay un envío en curso. Inténtalo de nuevo.', 'BUSY');
+  try {
+    const properties = PropertiesService.getScriptProperties(); const day = dateKey_(new Date());
+    const key = 'ATTENDANCE_MAIL_' + day + '_' + requestId;
+    const fingerprint = sha256_(email + String(input.periodLabel || ''));
+    if (properties.getProperty(key)) { if (properties.getProperty(key) !== fingerprint) throw apiError_('La solicitud ya se utilizó para otro informe.', 'CONFLICT'); return true; }
+    const quotaKey = 'ATTENDANCE_MAIL_COUNT_' + day; const count = Number(properties.getProperty(quotaKey) || 0);
+    if (count >= 30 || MailApp.getRemainingDailyQuota() < 1) throw apiError_('Se ha alcanzado el límite de envíos del día.', 'QUOTA');
+    const label = String(input.periodLabel || '').replace(/[<>\r\n]/g, '').slice(0,100);
+    const attachment = Utilities.newBlob(Utilities.base64Decode(pdf), 'application/pdf', 'Zabal-asistencia.pdf');
+    MailApp.sendEmail({ to: email, subject: 'Zabal Performance · Informe de asistencia · ' + label, body: 'Adjuntamos el informe de asistencia solicitado para ' + label + '.\n\nCreado y diseñado por Raul Cote', attachments: [attachment], name: 'Zabal Performance' });
+    properties.setProperty(key, fingerprint); properties.setProperty(quotaKey, String(count + 1));
+    Object.keys(properties.getProperties()).filter(function(name) { return name.indexOf('ATTENDANCE_MAIL_') === 0 && name.indexOf(day) < 0; }).forEach(function(name) { properties.deleteProperty(name); });
+    return true;
+  } finally { lock.releaseLock(); }
+}

@@ -1,3 +1,4 @@
+import { AttendanceExports } from './AttendanceExports';
 import { useEffect, useMemo, useState } from 'react';
 import { BarChart3, CalendarDays, CheckCircle2, CircleDotDashed, Save, UserCheck, UserX } from 'lucide-react';
 import type { AttendanceInput, AttendanceRecord, AttendanceStatus, Player } from '../types';
@@ -83,7 +84,8 @@ export function AttendancePanel({ players, attendance, saving, onSave }: Props) 
       <button type="button" className="button button--secondary" onClick={markAllPresent}><UserCheck size={17} /> Marcar todos presentes</button>
     </section>
 
-    <section className="panel-card attendance-list-card">
+    <AttendanceExports players={roster} records={attendance.filter((record) => record.date === date)} label={date} />
+      <section className="panel-card attendance-list-card">
       <div className="panel-card__heading">
         <div><p className="eyebrow eyebrow--dark">{formatDate(date)}</p><h2>Estado de la plantilla</h2></div>
         <small>{roster.length} jugadores</small>
@@ -113,6 +115,7 @@ export function AttendancePanel({ players, attendance, saving, onSave }: Props) 
         <div><p className="eyebrow eyebrow--dark">PERIODO</p><h2>Resumen de asistencia</h2></div>
         <div className="attendance-period-buttons">{(Object.keys(attendancePeriodLabels) as AttendancePeriod[]).map((value) => <button type="button" key={value} className={period === value ? 'active' : ''} onClick={() => setPeriod(value)}>{attendancePeriodLabels[value]}</button>)}</div>
       </section>
+      <AttendanceExports players={roster} records={filteredRecords} label={attendancePeriodLabels[period]} />
       <section className="panel-card attendance-summary-card">
         <div className="attendance-summary-metrics"><span><strong>{summary.sessionCount}</strong> entrenamientos</span><span><strong>{summary.averagePercent}%</strong> asistencia media</span><span><strong>{summary.perfectCount}</strong> jugadores al 100%</span></div>
         <div className="table-wrap"><table className="attendance-summary-table"><thead><tr><th>Dorsal</th><th>Jugador</th><th>Asistencias</th><th>No presente</th><th>Porcentaje</th></tr></thead><tbody>{summary.rows.map((row) => <tr key={row.playerId}><td>{row.number}</td><td><strong>{row.playerName}</strong></td><td>{row.attended} / {summary.sessionCount}</td><td>{row.absences}</td><td><div className={`attendance-rate ${row.percent < 80 ? 'attendance-rate--low' : ''}`}><span>{row.percent}%</span><i><b style={{ width: `${row.percent}%` }} /></i></div></td></tr>)}</tbody></table></div>

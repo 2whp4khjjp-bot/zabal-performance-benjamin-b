@@ -1,6 +1,10 @@
+import type { TeamSettings } from '../utils/teamSettings';
 import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BootstrapData, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, PlayerInput, TrainingSession } from '../types';
 
 export interface DataService {
+  getTeamSettings(token: string): Promise<TeamSettings>;
+  saveTeamSettings(token: string, settings: TeamSettings): Promise<TeamSettings>;
+  emailAttendance(token: string, email: string, pdfBase64: string, periodLabel: string, requestId: string): Promise<boolean>;
   authenticate(pin: string, role: AuthRole): Promise<AuthSession>;
   logout(token: string): Promise<void>;
   getBootstrap(token: string): Promise<BootstrapData>;

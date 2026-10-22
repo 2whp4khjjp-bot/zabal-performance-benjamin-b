@@ -1,3 +1,4 @@
+import type { TeamSettings } from '../utils/teamSettings';
 import { appConfig, environment } from '../config';
 import { createDemoMeasurements, createTodaySession, demoPlayers } from '../data/demo';
 import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BootstrapData, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, PlayerInput, TrainingSession } from '../types';
@@ -28,7 +29,7 @@ const readJson = <T>(key: string, fallback: T): T => {
   return JSON.parse(JSON.stringify(fallback)) as T;
 };
 
-const validateMatch = (input: MatchInput, players: Player[], previous?: MatchRecord) => {
+const validateMatch = (input: MatchInput, players: Player[], previous?: MatchRecord, maxStarters = appConfig.maxStarters) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new DataServiceError('La fecha del partido no es válida.', 'VALIDATION');
   if (!['official', 'friendly'].includes(input.type)) throw new DataServiceError('El tipo de partido no es válido.', 'VALIDATION');
   const opponent = input.opponent.replace(/[<>]/g, '').trim().slice(0, 100);
@@ -52,11 +53,15 @@ const validateMatch = (input: MatchInput, players: Player[], previous?: MatchRec
     return { playerId: player.id, playerName: player.name, number: formerNumber === undefined ? player.number ?? null : formerNumber, minutes: entry.minutes, starter: Boolean(entry.starter), goals };
   });
   if (!minutes.length) throw new DataServiceError('Introduce los datos de al menos un jugador.', 'VALIDATION');
-  if (minutes.filter((entry) => entry.starter).length > appConfig.maxStarters) throw new DataServiceError(`No puedes marcar más de ${appConfig.maxStarters} titulares.`, 'VALIDATION');
+  if (minutes.filter((entry) => entry.starter).length > maxStarters) throw new DataServiceError(`No puedes marcar más de ${maxStarters} titulares.`, 'VALIDATION');
   return { opponent, minutes };
 };
 
 export class LocalDataService implements DataService {
+  async getTeamSettings(token: string): Promise<TeamSettings> { this.requireSession(token); return JSON.parse(localStorage.getItem('zabal-team-settings') || 'null') || { profile: 'football7', weight: true, fatigue: true, soreness: true, injuries: true, attendance: true, matches: true, cards: true }; }
+  async saveTeamSettings(token: string, settings: TeamSettings) { const auth = this.requireSession(token); if (auth.role !== 'staff') throw new DataServiceError('Acceso reservado al cuerpo técnico.', 'FORBIDDEN'); localStorage.setItem('zabal-team-settings', JSON.stringify(settings)); return settings; }
+  async emailAttendance(_token: string, _email: string, _pdfBase64: string, _periodLabel: string, _requestId: string): Promise<boolean> { throw new DataServiceError('El envío de correo requiere conexión al servicio del equipo.', 'CONFIG'); }
+
   private sessions = new Map<string, AuthSession>();
 
   private requireSession(token: string) {
@@ -251,9 +256,10 @@ export class LocalDataService implements DataService {
     const auth = this.requireSession(token);
     if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede guardar partidos.', 'FORBIDDEN');
     const players = readJson(PLAYERS_KEY, demoPlayers);
-    const { opponent, minutes } = validateMatch(input, players);
+    const { opponent, minutes } = validateMatch(input, players, undefined, (await this.getTeamSettings(token)).profile === 'football7' ? 7 : 11);
     const now = new Date().toISOString();
     const match: MatchRecord = {
+      referee: input.referee, goalsFor: input.goalsFor, goalsAgainst: input.goalsAgainst, incidents: input.incidents, captainId: input.captainId,
       id: crypto.randomUUID(), date: input.date, type: input.type, opponent,
       durationMinutes: input.durationMinutes, minutes, createdAt: now, updatedAt: now, createdBy: 'cuerpo-tecnico',
     };
@@ -271,9 +277,9 @@ export class LocalDataService implements DataService {
     if (index < 0 || matches[index].deletedAt) throw new DataServiceError('No se encontró el partido.', 'NOT_FOUND');
     const previous = matches[index];
     if (previous.updatedAt !== expectedUpdatedAt) throw new DataServiceError('Este partido ha cambiado. Recarga la página antes de editarlo.', 'CONFLICT');
-    const { opponent, minutes } = validateMatch(input, readJson(PLAYERS_KEY, demoPlayers), previous);
+    const { opponent, minutes } = validateMatch(input, readJson(PLAYERS_KEY, demoPlayers), previous, (await this.getTeamSettings(token)).profile === 'football7' ? 7 : 11);
     const updatedAt = new Date(Math.max(Date.now(), Date.parse(previous.updatedAt) + 1)).toISOString();
-    const updated: MatchRecord = { ...previous, date: input.date, type: input.type, opponent, durationMinutes: input.durationMinutes, minutes, updatedAt };
+    const updated: MatchRecord = { ...previous, referee: input.referee, goalsFor: input.goalsFor, goalsAgainst: input.goalsAgainst, incidents: input.incidents, captainId: input.captainId, date: input.date, type: input.type, opponent, durationMinutes: input.durationMinutes, minutes, updatedAt };
     matches[index] = updated;
     localStorage.setItem(MATCHES_KEY, JSON.stringify(matches));
     return updated;

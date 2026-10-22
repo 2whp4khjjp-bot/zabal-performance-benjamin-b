@@ -1,3 +1,4 @@
+import { useTeamSettings } from '../utils/teamSettings';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ArrowLeft, CalendarDays, ChevronDown, ChevronUp, History, Save, Scale, TrendingDown, TrendingUp } from 'lucide-react';
 import type { AuthRole, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
@@ -53,6 +54,7 @@ function ScorePicker({ label, value, onChange }: { label: string; value: number 
 }
 
 export function PlayerForm({ player, measurements, session, saving, onSave, onBack, role }: FormProps) {
+  const teamSettings = useTeamSettings();
   const [measurementDate, setMeasurementDate] = useState(todayKey());
   const existing = measurements.find((item) => item.playerId === player.id && item.date === measurementDate);
   const [draft, setDraft] = useState<Draft>(() => readDraft(player.id, todayKey(), existing));
@@ -72,10 +74,10 @@ export function PlayerForm({ player, measurements, session, saving, onSave, onBa
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const weight = draft.weight.trim() ? parseWeight(draft.weight) : undefined;
+    const weight = teamSettings.weight && draft.weight.trim() ? parseWeight(draft.weight) : undefined;
     const nextErrors: string[] = [];
     if (weight === null) nextErrors.push('El peso debe estar entre 30 y 250 kg. También puedes dejarlo vacío.');
-    if (weight === undefined && draft.fatigue === null && draft.soreness === null && !draft.comments.trim()) nextErrors.push('Rellena al menos un dato antes de guardar.');
+    if (weight === undefined && (!teamSettings.fatigue || draft.fatigue === null) && (!teamSettings.soreness || draft.soreness === null) && !draft.comments.trim()) nextErrors.push('Rellena al menos un dato antes de guardar.');
     if (nextErrors.length || weight === null) {
       setErrors(nextErrors);
       return;
@@ -86,8 +88,8 @@ export function PlayerForm({ player, measurements, session, saving, onSave, onBa
       playerId: player.id,
       playerName: player.name,
       weight,
-      fatigue: draft.fatigue ?? undefined,
-      soreness: draft.soreness ?? undefined,
+      fatigue: teamSettings.fatigue ? draft.fatigue ?? undefined : undefined,
+      soreness: teamSettings.soreness ? draft.soreness ?? undefined : undefined,
       comments: draft.comments,
       sessionId: session.id,
     });
@@ -112,7 +114,7 @@ export function PlayerForm({ player, measurements, session, saving, onSave, onBa
             <small>Selecciona otro día para añadir datos atrasados o corregir una medición ya guardada.</small>
           </section>}
           <section className="form-section">
-            <div className="weight-field">
+            <div data-feature="weight" className="weight-field">
               <label htmlFor="weight"><Scale size={20} /> Peso <span>kg</span></label>
               <input
                 id="weight"
@@ -128,8 +130,8 @@ export function PlayerForm({ player, measurements, session, saving, onSave, onBa
             </div>
           </section>
           <section className="form-section score-section">
-            <ScorePicker label="Fatiga" value={draft.fatigue} onChange={(fatigue) => setDraft({ ...draft, fatigue })} />
-            <ScorePicker label="Molestias o lesión" value={draft.soreness} onChange={(soreness) => setDraft({ ...draft, soreness })} />
+            <div data-feature="fatigue"><ScorePicker label="Fatiga" value={draft.fatigue} onChange={(fatigue) => setDraft({ ...draft, fatigue })} /></div>
+            <div data-feature="soreness"><ScorePicker label="Molestias o lesión" value={draft.soreness} onChange={(soreness) => setDraft({ ...draft, soreness })} /></div>
           </section>
           <section className="form-section">
             <label className="comments-label" htmlFor="comments">Comentarios <span>Opcional · máximo 500 caracteres</span></label>

@@ -1,8 +1,9 @@
+import { emptyMatchDetails, detailsFromMatch, MatchDetailsFields, MatchPdfButton } from './MatchDetailsFields';
+import { useTeamSettings } from '../utils/teamSettings';
 import { useMemo, useState } from 'react';
 import { CalendarDays, Clock3, FileDown, Goal, History, Pencil, Save, Star, Trash2, Trophy, UsersRound } from 'lucide-react';
 import type { MatchInput, MatchRecord, MatchType, Player } from '../types';
 import { todayKey } from '../utils/date';
-import { appConfig } from '../config';
 import { sortMatchStats, type MatchSort } from '../utils/matchSort';
 import { downloadMatchMinutesPdf } from '../services/matchMinutesPdf';
 
@@ -27,6 +28,10 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
   const [date, setDate] = useState(todayKey());
   const [type, setType] = useState<MatchType>('official');
   const [opponent, setOpponent] = useState('');
+  const [details, setDetails] = useState(emptyMatchDetails);
+  const [saveRequestId, setSaveRequestId] = useState(() => crypto.randomUUID());
+  const teamSettings = useTeamSettings();
+  const maxStarters = teamSettings.profile === 'football7' ? 7 : 11;
   const [durationOption, setDurationOption] = useState('90');
   const [customDuration, setCustomDuration] = useState('90');
   const [minutesByPlayer, setMinutesByPlayer] = useState<Record<string, string>>({});
@@ -49,7 +54,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
     setEditing(null);
     setDate(todayKey());
     setType('official');
-    setOpponent('');
+    setOpponent(''); setDetails(emptyMatchDetails); setSaveRequestId(crypto.randomUUID());
     setDurationOption('90');
     setCustomDuration('90');
     setMinutesByPlayer({});
@@ -62,7 +67,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
     setEditing(match);
     setDate(match.date);
     setType(match.type);
-    setOpponent(match.opponent);
+    setOpponent(match.opponent); setDetails(detailsFromMatch(match));
     const value = String(match.durationMinutes);
     setDurationOption(durationOptions.some((option) => String(option) === value) ? value : 'custom');
     setCustomDuration(value);
@@ -119,7 +124,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
     if (!opponent.trim()) next.push('Introduce el rival.');
     if (!Number.isInteger(duration) || duration < 1 || duration > 180) next.push('La duración debe estar entre 1 y 180 minutos.');
     if (!enteredCount) next.push('Introduce los datos de al menos un jugador.');
-    if (starterCount > appConfig.maxStarters) next.push(`Puedes marcar como máximo ${appConfig.maxStarters} titulares.`);
+    if (starterCount > maxStarters) next.push(`Puedes marcar como máximo ${maxStarters} titulares.`);
     formPlayers.forEach((player) => {
       const raw = minutesByPlayer[player.id];
       const hasEntry = (raw ?? '') !== '' || Boolean(starterByPlayer[player.id]) || Number(goalsByPlayer[player.id] || 0) > 0;
@@ -137,6 +142,8 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
     event.preventDefault();
     if (!validate()) return;
     const input: MatchInput = {
+      ...details,
+      requestId: saveRequestId,
       date,
       type,
       opponent: opponent.trim(),
@@ -174,6 +181,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
             <label className="match-field--wide">Duración total<select value={durationOption} onChange={(event) => setDurationOption(event.target.value)}>{durationOptions.map((value) => <option key={value} value={value}>{value} minutos</option>)}<option value="custom">Personalizado</option></select></label>
             {durationOption === 'custom' && <label className="match-field--wide">Minutos personalizados<input type="number" min="1" max="180" inputMode="numeric" value={customDuration} onChange={(event) => setCustomDuration(event.target.value)} /></label>}
           </div>
+          <MatchDetailsFields value={details} onChange={setDetails} players={players} />
         </section>
 
         <section className="panel-card match-minutes-card">
@@ -186,12 +194,12 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
             {sortMatchStats(formPlayers.map((player) => ({ ...player, number: editing?.minutes.find((entry) => entry.playerId === player.id)?.number ?? player.number, minutes: Number(minutesByPlayer[player.id] || 0), goals: Number(goalsByPlayer[player.id] || 0) })), formSortBy).map((player) => <label className="match-player-row" key={player.id}>
               <span className="match-player-number">{editing?.minutes.find((entry) => entry.playerId === player.id)?.number ?? (editing?.minutes.some((entry) => entry.playerId === player.id) ? '—' : player.number ?? '—')}</span>
               <span className="match-player-name">{player.name}{!player.active && <small className="former-player-label"> · baja</small>}</span>
-              <span className={`match-starter ${starterByPlayer[player.id] ? 'active' : ''}`}><input type="checkbox" checked={Boolean(starterByPlayer[player.id])} disabled={!starterByPlayer[player.id] && starterCount >= appConfig.maxStarters} onChange={(event) => { setStarterByPlayer((current) => ({ ...current, [player.id]: event.target.checked })); setErrors([]); }} aria-label={`Titular: ${player.name}`} /><Star size={16} /><small>Tit.</small></span>
+              <span className={`match-starter ${starterByPlayer[player.id] ? 'active' : ''}`}><input type="checkbox" checked={Boolean(starterByPlayer[player.id])} disabled={!starterByPlayer[player.id] && starterCount >= maxStarters} onChange={(event) => { setStarterByPlayer((current) => ({ ...current, [player.id]: event.target.checked })); setErrors([]); }} aria-label={`Titular: ${player.name}`} /><Star size={16} /><small>Tit.</small></span>
               <span className="match-minutes-input"><input type="number" min="0" max={Number.isFinite(duration) ? duration : undefined} step="1" inputMode="numeric" value={minutesByPlayer[player.id] ?? ''} onChange={(event) => { setMinutesByPlayer((current) => ({ ...current, [player.id]: event.target.value })); setErrors([]); }} aria-label={`Minutos de ${player.name}`} placeholder="—" /><small>min</small></span>
               <span className="match-goal-input"><Goal size={16} /><input type="number" min="0" max="20" step="1" inputMode="numeric" value={goalsByPlayer[player.id] ?? ''} onChange={(event) => { setGoalsByPlayer((current) => ({ ...current, [player.id]: event.target.value })); setErrors([]); }} aria-label={`Goles de ${player.name}`} placeholder="0" /></span>
             </label>)}
           </div>
-          <div className="match-form-summary"><span><UsersRound size={17} /> <strong>{enteredCount}</strong> jugadores incluidos</span><span><Star size={17} /> <strong>{starterCount}/{appConfig.maxStarters}</strong> titulares</span><span><Clock3 size={17} /> <strong>{totalEnteredMinutes}</strong> minutos acumulados</span></div>
+          <div className="match-form-summary"><span><UsersRound size={17} /> <strong>{enteredCount}</strong> jugadores incluidos</span><span><Star size={17} /> <strong>{starterCount}/{maxStarters}</strong> titulares</span><span><Clock3 size={17} /> <strong>{totalEnteredMinutes}</strong> minutos acumulados</span></div>
           {errors.length > 0 && <div className="validation-summary" role="alert"><strong>No se puede guardar todavía:</strong><ul>{errors.map((error) => <li key={error}>{error}</li>)}</ul></div>}
           <div className="match-save-bar"><button className="button button--primary button--wide" disabled={saving} type="submit"><Save size={19} /> {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Guardar acta'}</button>{editing && <button className="button button--secondary" disabled={saving} type="button" onClick={() => { resetForm(); setMode('history'); }}>Cancelar</button>}</div>
         </section>
@@ -209,7 +217,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
               <span className={`match-type-icon match-type-icon--${match.type}`}><Trophy size={18} /></span>
               <div><strong>{match.opponent}</strong><small>{match.date} · {typeLabel(match.type)} · {match.durationMinutes} min · {match.minutes.filter((item) => item.starter).length} titulares</small></div>
               <span className="recent-match-goals"><strong>{match.minutes.reduce((sum, item) => sum + (item.goals ?? 0), 0)}</strong><small>goles</small></span>
-              <div className="match-row-actions"><button type="button" className="button button--secondary match-edit-button" disabled={saving} onClick={() => editMatch(match)} aria-label={`Editar partido contra ${match.opponent} del ${match.date}`}><Pencil size={16} /> Editar</button><button type="button" className="button button--secondary match-delete-button" disabled={saving} onClick={() => confirmDelete(match)} aria-label={`Eliminar partido contra ${match.opponent} del ${match.date}`}><Trash2 size={16} /> Eliminar</button></div>
+              <div className="match-row-actions"><MatchPdfButton match={match} players={players} /><button type="button" className="button button--secondary match-edit-button" disabled={saving} onClick={() => editMatch(match)} aria-label={`Editar partido contra ${match.opponent} del ${match.date}`}><Pencil size={16} /> Editar</button><button type="button" className="button button--secondary match-delete-button" disabled={saving} onClick={() => confirmDelete(match)} aria-label={`Eliminar partido contra ${match.opponent} del ${match.date}`}><Trash2 size={16} /> Eliminar</button></div>
               <details className="match-history-detail"><summary>Ver acta y dorsales de este partido</summary>
                 <div className="table-scroll"><table><thead><tr><th>Dorsal</th><th>Jugador</th><th>Titular</th><th>Minutos</th><th>Goles</th></tr></thead><tbody>{sortMatchStats(match.minutes.map((entry) => ({ ...entry, name: entry.playerName })), sortBy).map((entry) => <tr key={entry.playerId}><td>{entry.number ?? '—'}</td><td>{entry.playerName}</td><td>{entry.starter ? 'Sí' : 'No'}</td><td>{entry.minutes}</td><td>{entry.goals ?? 0}</td></tr>)}</tbody></table></div>
               </details>

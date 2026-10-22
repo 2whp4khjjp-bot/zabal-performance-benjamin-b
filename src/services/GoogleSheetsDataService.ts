@@ -1,3 +1,4 @@
+import type { TeamSettings } from '../utils/teamSettings';
 import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BootstrapData, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, PlayerInput, TrainingSession } from '../types';
 import type { DataService } from './DataService';
 import { DataServiceError } from './DataService';
@@ -6,6 +7,10 @@ type ApiResponse<T> = { ok: boolean; data?: T; error?: string; code?: string };
 
 export class GoogleSheetsDataService implements DataService {
   constructor(private readonly endpoint: string) {}
+  getTeamSettings(token: string) { return this.request<TeamSettings>('getTeamSettings', { token }); }
+  saveTeamSettings(token: string, settings: TeamSettings) { return this.request<TeamSettings>('saveTeamSettings', { token, settings }); }
+  emailAttendance(token: string, email: string, pdfBase64: string, periodLabel: string, requestId: string) { return this.request<boolean>('emailAttendance', { token, email, pdfBase64, periodLabel, requestId }); }
+
 
   private async request<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
     if (!this.endpoint) throw new DataServiceError('Falta configurar la URL de Google Apps Script.', 'CONFIG');

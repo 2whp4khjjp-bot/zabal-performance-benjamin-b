@@ -70,7 +70,12 @@ export function ReportEmailPanel({ label, createPdf, canSchedule = false, onClos
       await dataService.emailMatchPdf(auth.token, selected, pdf.output('datauristring').split(',')[1], label, requestId);
       setMessage('PDF enviado a ' + selected.join(', '));
       setRequestId(crypto.randomUUID());
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo enviar el PDF.'); }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'No se pudo enviar el PDF.';
+      setMessage(/MailApp|script\.send_mail|permiso para llamar/i.test(detail)
+        ? 'El propietario debe autorizar el permiso de correo en Google Apps Script. El PDF no se ha enviado.'
+        : detail);
+    }
     finally { setBusy(false); }
   };
   const saveSchedule = async (enabled: boolean) => {

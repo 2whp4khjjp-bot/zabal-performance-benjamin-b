@@ -1,3 +1,8 @@
+// Ejecutar desde el editor para autorizar el correo sin enviar mensajes.
+function verifyMailPermission() {
+  return MailApp.getRemainingDailyQuota();
+}
+
 /**
  * API de Google Apps Script para Zabal Performance.
  * Despliegue como aplicación web ejecutada por el propietario.
@@ -936,3 +941,4 @@ function emailMatchPdf_(input, session) {
     return true;
   } finally { lock.releaseLock(); }
 }
+

@@ -14,8 +14,11 @@ type Options = { totals: MatchMinutesTotal[]; matches: MatchRecord[]; sortBy: Ma
 
 const sortDescription: Record<MatchSort, string> = {
   number: 'Dorsal (de menor a mayor)',
+  name: 'Jugador (alfabético)',
   minutes: 'Minutos (de mayor a menor)',
   goals: 'Goles (de mayor a menor)',
+  starts: 'Titularidades (de mayor a menor)',
+  appearances: 'Partidos (de mayor a menor)',
 };
 
 const formatDate = (value: string) => {

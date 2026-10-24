@@ -10,6 +10,11 @@ export class GoogleSheetsDataService implements DataService {
   getTeamSettings(token: string) { return this.request<TeamSettings>('getTeamSettings', { token }); }
   saveTeamSettings(token: string, settings: TeamSettings) { return this.request<TeamSettings>('saveTeamSettings', { token, settings }); }
   emailAttendance(token: string, email: string, pdfBase64: string, periodLabel: string, requestId: string) { return this.request<boolean>('emailAttendance', { token, email, pdfBase64, periodLabel, requestId }); }
+  getReportRecipients(token: string) { return this.request<string[]>('getReportRecipients', { token }); }
+  saveReportRecipients(token: string, emails: string[]) { return this.request<string[]>('saveReportRecipients', { token, emails }); }
+  emailMatchPdf(token: string, emails: string[], pdfBase64: string, reportLabel: string, requestId: string) { return this.request<boolean>('emailMatchPdf', { token, emails, pdfBase64, reportLabel, requestId }); }
+  getReportSchedule(token: string) { return this.request<import('./DataService').ReportSchedule>('getReportSchedule', { token }); }
+  saveReportSchedule(token: string, schedule: import('./DataService').ReportSchedule) { return this.request<import('./DataService').ReportSchedule>('saveReportSchedule', { token, schedule }); }
 
 
   private async request<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {

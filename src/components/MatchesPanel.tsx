@@ -1,3 +1,5 @@
+import { ReportEmailPanel } from './ReportEmailPanel';
+import { createMatchDocument } from '../services/teamDocuments';
 import { emptyMatchDetails, detailsFromMatch, MatchDetailsFields, MatchPdfButton } from './MatchDetailsFields';
 import { useTeamSettings } from '../utils/teamSettings';
 import { useMemo, useState } from 'react';
@@ -5,7 +7,7 @@ import { CalendarDays, Clock3, FileDown, Goal, History, Pencil, Save, Star, Tras
 import type { MatchInput, MatchRecord, MatchType, Player } from '../types';
 import { todayKey } from '../utils/date';
 import { sortMatchStats, type MatchSort } from '../utils/matchSort';
-import { downloadMatchMinutesPdf } from '../services/matchMinutesPdf';
+import { buildMatchMinutesPdf, downloadMatchMinutesPdf } from '../services/matchMinutesPdf';
 
 const durationOptions = [40, 50, 60, 70, 80, 90] as const;
 
@@ -21,6 +23,7 @@ type Props = {
 const typeLabel = (type: MatchType) => type === 'official' ? 'Oficial' : 'Amistoso';
 
 export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDelete }: Props) {
+  const [emailTarget, setEmailTarget] = useState<MatchRecord | 'totals' | null>(null);
   const [mode, setMode] = useState<'new' | 'history'>('new');
   const [sortBy, setSortBy] = useState<MatchSort>('minutes');
   const [formSortBy, setFormSortBy] = useState<MatchSort>('number');
@@ -106,6 +109,8 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
     return sortMatchStats([...byPlayer.values()].filter((item) => item.appearances || item.starts || item.minutes || item.goals).map((item) => ({ ...item, number: item.player.number, name: item.player.name })), sortBy);
   }, [matches, players, sortBy]);
 
+  const totalHeader = (label: string, key: MatchSort) => <th aria-sort={sortBy === key ? (key === 'number' || key === 'name' ? 'ascending' : 'descending') : 'none'}><button type="button" className="table-sort-button" onClick={() => setSortBy(key)}>{label}{sortBy === key ? (key === 'number' || key === 'name' ? ' ↑' : ' ↓') : ''}</button></th>;
+
   const exportMinutesPdf = async () => {
     setPdfError('');
     setExportingPdf(true);
@@ -117,6 +122,15 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
       setExportingPdf(false);
     }
   };
+
+  const makeEmailPdf = async () => {
+    if (emailTarget === 'totals') return buildMatchMinutesPdf({ totals, matches, sortBy });
+    if (!emailTarget) throw new Error('Selecciona un informe.');
+    const currentMatch = matches.find((match) => match.id === emailTarget.id);
+    if (!currentMatch) throw new Error('El partido ya no está disponible.');
+    return createMatchDocument(currentMatch, players);
+  };
+  const emailLabel = emailTarget === 'totals' ? 'Acumulado de partidos' : emailTarget ? `Partido contra ${emailTarget.opponent} · ${emailTarget.date}` : '';
 
   const validate = () => {
     const next: string[] = [];
@@ -207,9 +221,10 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
         <div className="matches-history-grid">
           <article className="panel-card match-totals-card">
             <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Temporada</p><h2>Totales por jugador</h2></div><span className="count-badge count-badge--blue">{matches.length}</span></div>
-            <div className="match-sort-control"><label htmlFor="match-sort">Ordenar jugadores por</label><select id="match-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as MatchSort)}><option value="number">Dorsal</option><option value="minutes">Minutos</option><option value="goals">Goles</option></select><button type="button" className="button button--secondary match-pdf-button" disabled={!totals.length || exportingPdf} onClick={() => void exportMinutesPdf()}><FileDown size={17} /> {exportingPdf ? 'Generando…' : 'Descargar PDF'}</button></div>
+            <div className="match-sort-control"><label htmlFor="match-sort">Ordenar jugadores por</label><select id="match-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as MatchSort)}><option value="number">Dorsal</option><option value="name">Jugador</option><option value="minutes">Minutos</option><option value="goals">Goles</option><option value="starts">Titularidades</option><option value="appearances">Partidos</option></select><button type="button" className="button button--secondary match-pdf-button" disabled={!totals.length || exportingPdf} onClick={() => void exportMinutesPdf()}><FileDown size={17} /> {exportingPdf ? 'Generando…' : 'Descargar PDF'}</button></div>
             {pdfError && <p className="match-pdf-error" role="alert">{pdfError}</p>}
-            {totals.length ? <div className="table-scroll"><table><thead><tr><th>Dorsal</th><th>Jugador</th><th>Partidos</th><th>Tit.</th><th>Minutos</th><th>Goles</th></tr></thead><tbody>{totals.map((item) => <tr key={item.player.id}><td>{item.player.number ?? '—'}</td><td><strong>{item.player.name}</strong></td><td>{item.appearances}</td><td>{item.starts}</td><td><strong>{item.minutes}</strong></td><td><strong>{item.goals}</strong></td></tr>)}</tbody></table></div> : <div className="empty-state compact"><UsersRound size={30} /><h2>Sin minutos registrados</h2><p>Los totales aparecerán después de guardar el primer partido.</p></div>}
+            <button type="button" className="button button--secondary report-email-open" disabled={!matches.length} onClick={() => setEmailTarget('totals')}>Enviar acumulado en PDF</button>
+            {totals.length ? <div className="table-scroll"><table><thead><tr>{totalHeader('Dorsal', 'number')}{totalHeader('Jugador', 'name')}{totalHeader('Partidos', 'appearances')}{totalHeader('Tit.', 'starts')}{totalHeader('Minutos', 'minutes')}{totalHeader('Goles', 'goals')}</tr></thead><tbody>{totals.map((item) => <tr key={item.player.id}><td>{item.player.number ?? '—'}</td><td><strong>{item.player.name}</strong></td><td>{item.appearances}</td><td>{item.starts}</td><td><strong>{item.minutes}</strong></td><td><strong>{item.goals}</strong></td></tr>)}</tbody></table></div> : <div className="empty-state compact"><UsersRound size={30} /><h2>Sin minutos registrados</h2><p>Los totales aparecerán después de guardar el primer partido.</p></div>}
           </article>
           <article className="panel-card recent-matches-card">
             <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Registro</p><h2>Últimos partidos</h2></div><History /></div>
@@ -217,12 +232,13 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
               <span className={`match-type-icon match-type-icon--${match.type}`}><Trophy size={18} /></span>
               <div><strong>{match.opponent}</strong><small>{match.date} · {typeLabel(match.type)} · {match.durationMinutes} min · {match.minutes.filter((item) => item.starter).length} titulares</small></div>
               <span className="recent-match-goals"><strong>{match.minutes.reduce((sum, item) => sum + (item.goals ?? 0), 0)}</strong><small>goles</small></span>
-              <div className="match-row-actions"><MatchPdfButton match={match} players={players} /><button type="button" className="button button--secondary match-edit-button" disabled={saving} onClick={() => editMatch(match)} aria-label={`Editar partido contra ${match.opponent} del ${match.date}`}><Pencil size={16} /> Editar</button><button type="button" className="button button--secondary match-delete-button" disabled={saving} onClick={() => confirmDelete(match)} aria-label={`Eliminar partido contra ${match.opponent} del ${match.date}`}><Trash2 size={16} /> Eliminar</button></div>
+              <div className="match-row-actions"><MatchPdfButton match={match} players={players} /><button type="button" className="button button--secondary" onClick={() => setEmailTarget(match)}>Enviar PDF</button><button type="button" className="button button--secondary match-edit-button" disabled={saving} onClick={() => editMatch(match)} aria-label={`Editar partido contra ${match.opponent} del ${match.date}`}><Pencil size={16} /> Editar</button><button type="button" className="button button--secondary match-delete-button" disabled={saving} onClick={() => confirmDelete(match)} aria-label={`Eliminar partido contra ${match.opponent} del ${match.date}`}><Trash2 size={16} /> Eliminar</button></div>
               <details className="match-history-detail"><summary>Ver acta y dorsales de este partido</summary>
                 <div className="table-scroll"><table><thead><tr><th>Dorsal</th><th>Jugador</th><th>Titular</th><th>Minutos</th><th>Goles</th></tr></thead><tbody>{sortMatchStats(match.minutes.map((entry) => ({ ...entry, name: entry.playerName })), sortBy).map((entry) => <tr key={entry.playerId}><td>{entry.number ?? '—'}</td><td>{entry.playerName}</td><td>{entry.starter ? 'Sí' : 'No'}</td><td>{entry.minutes}</td><td>{entry.goals ?? 0}</td></tr>)}</tbody></table></div>
               </details>
             </article>)}</div> : <div className="empty-state compact"><Trophy size={30} /><h2>Todavía no hay partidos</h2><button className="text-button" onClick={() => setMode('new')}>Registrar el primero</button></div>}
           </article>
+          {emailTarget && <ReportEmailPanel key={emailLabel} label={emailLabel} createPdf={makeEmailPdf} canSchedule={emailTarget === 'totals'} onClose={() => setEmailTarget(null)} />}
         </div>
       </section>}
     </main>

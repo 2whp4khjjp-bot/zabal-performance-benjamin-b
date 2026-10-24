@@ -82,7 +82,7 @@ node -e "console.log(require('node:crypto').createHash('sha256').update('TU_PIN'
 
 1. Cree una hoja de cálculo nueva en Google Sheets.
 2. Abra **Extensiones > Apps Script**.
-3. Copie `apps-script/Code.gs` y `apps-script/appsscript.json` en el proyecto.
+3. Copie `apps-script/Code.gs`, `apps-script/ReportSchedule.gs` y `apps-script/appsscript.json` en el proyecto.
 4. Guarde y recargue la hoja.
 5. En el nuevo menú **Zabal Performance**, ejecute **Preparar pestañas y datos demo**. Autorice el script con la cuenta propietaria.
 6. En el mismo menú, pulse **Configurar PIN del cuerpo técnico**.
@@ -99,6 +99,8 @@ VITE_PUBLIC_URL=https://rendimiento.atleticozabal.com
 ```
 
 12. Compile y despliegue de nuevo la web.
+
+En **Partidos > Historial > Enviar acumulado en PDF** hay dos pestañas: **Enviar ahora** y **Programar envíos**. La programación empieza desactivada; guardar un correo o un borrador no crea envíos. Solo el botón **Activar envíos semanales** instala el programador. **Pausar envíos** lo elimina. El PDF programado se genera con datos actualizados al ejecutarse y la hora elegida es aproximada (Europe/Madrid). La primera activación puede pedir autorización para gestionar el programador del script.
 
 Las pestañas creadas son `Jugadores`, `Mediciones`, `Sesiones`, `Configuración` y `Códigos jugadores`.
 

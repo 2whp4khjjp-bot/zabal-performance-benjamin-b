@@ -102,6 +102,8 @@ VITE_PUBLIC_URL=https://rendimiento.atleticozabal.com
 
 En **Partidos > Historial > Enviar acumulado en PDF** hay dos pestañas: **Enviar ahora** y **Programar envíos**. La programación empieza desactivada; guardar un correo o un borrador no crea envíos. Solo el botón **Activar envíos semanales** instala el programador. **Pausar envíos** lo elimina. El PDF programado se genera con datos actualizados al ejecutarse y la hora elegida es aproximada (Europe/Madrid). La primera activación puede pedir autorización para gestionar el programador del script.
 
+Antes del primer envío por correo, la cuenta que implementa Apps Script debe abrir el editor, ejecutar `verifyMailPermission` y conceder el permiso de envío solicitado por Google. Esa función solo consulta la cuota: no manda correos. Después hay que crear una versión nueva y actualizar la implementación web existente. Si se revoca el permiso, repetir la autorización desde el editor.
+
 Las pestañas creadas son `Jugadores`, `Mediciones`, `Sesiones`, `Configuración` y `Códigos jugadores`.
 
 ### Añadir o desactivar jugadores

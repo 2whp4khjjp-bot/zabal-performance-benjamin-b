@@ -1,4 +1,4 @@
-import { ReportEmailPanel } from './ReportEmailPanel';
+import { ReportEmailDialog } from './ReportEmailDialog';
 import { createMatchDocument } from '../services/teamDocuments';
 import { emptyMatchDetails, detailsFromMatch, MatchDetailsFields, MatchPdfButton } from './MatchDetailsFields';
 import { useTeamSettings } from '../utils/teamSettings';
@@ -238,7 +238,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
               </details>
             </article>)}</div> : <div className="empty-state compact"><Trophy size={30} /><h2>Todavía no hay partidos</h2><button className="text-button" onClick={() => setMode('new')}>Registrar el primero</button></div>}
           </article>
-          {emailTarget && <ReportEmailPanel key={emailLabel} label={emailLabel} createPdf={makeEmailPdf} canSchedule={emailTarget === 'totals'} onClose={() => setEmailTarget(null)} />}
+          {emailTarget && <ReportEmailDialog key={emailLabel} label={emailLabel} createPdf={makeEmailPdf} canSchedule={emailTarget === 'totals'} onClose={() => setEmailTarget(null)} />}
         </div>
       </section>}
     </main>

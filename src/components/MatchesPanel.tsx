@@ -1,3 +1,4 @@
+import { createDisciplinaryDocument } from '../services/disciplinaryReport';
 import { ReportEmailDialog } from './ReportEmailDialog';
 import { createMatchDocument } from '../services/teamDocuments';
 import { emptyMatchDetails, detailsFromMatch, MatchDetailsFields, MatchPdfButton } from './MatchDetailsFields';
@@ -23,7 +24,7 @@ type Props = {
 const typeLabel = (type: MatchType) => type === 'official' ? 'Oficial' : 'Amistoso';
 
 export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDelete }: Props) {
-  const [emailTarget, setEmailTarget] = useState<MatchRecord | 'totals' | null>(null);
+  const [emailTarget, setEmailTarget] = useState<MatchRecord | 'totals' | 'discipline' | null>(null);
   const [mode, setMode] = useState<'new' | 'history'>('new');
   const [sortBy, setSortBy] = useState<MatchSort>('minutes');
   const [formSortBy, setFormSortBy] = useState<MatchSort>('number');
@@ -124,13 +125,14 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
   };
 
   const makeEmailPdf = async () => {
+    if (emailTarget === 'discipline') return createDisciplinaryDocument(players, matches.filter(m => m.type === 'official'), 'Oficiales');
     if (emailTarget === 'totals') return buildMatchMinutesPdf({ totals, matches, sortBy });
     if (!emailTarget) throw new Error('Selecciona un informe.');
     const currentMatch = matches.find((match) => match.id === emailTarget.id);
     if (!currentMatch) throw new Error('El partido ya no está disponible.');
     return createMatchDocument(currentMatch, players);
   };
-  const emailLabel = emailTarget === 'totals' ? 'Acumulado de partidos' : emailTarget ? `Partido contra ${emailTarget.opponent} · ${emailTarget.date}` : '';
+  const emailLabel = emailTarget === 'discipline' ? 'Informe disciplinario · Oficiales' : emailTarget === 'totals' ? 'Acumulado de partidos' : emailTarget ? `Partido contra ${emailTarget.opponent} · ${emailTarget.date}` : '';
 
   const validate = () => {
     const next: string[] = [];
@@ -223,6 +225,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
             <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Temporada</p><h2>Totales por jugador</h2></div><span className="count-badge count-badge--blue">{matches.length}</span></div>
             <div className="match-sort-control"><label htmlFor="match-sort">Ordenar jugadores por</label><select id="match-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as MatchSort)}><option value="number">Dorsal</option><option value="name">Jugador</option><option value="minutes">Minutos</option><option value="goals">Goles</option><option value="starts">Titularidades</option><option value="appearances">Partidos</option></select><button type="button" className="button button--secondary match-pdf-button" disabled={!totals.length || exportingPdf} onClick={() => void exportMinutesPdf()}><FileDown size={17} /> {exportingPdf ? 'Generando…' : 'Descargar PDF'}</button></div>
             {pdfError && <p className="match-pdf-error" role="alert">{pdfError}</p>}
+            <button type="button" className="button button--secondary report-email-open" onClick={() => setEmailTarget('discipline')}>Informe disciplinario · Descargar y enviar</button>
             <button type="button" className="button button--secondary report-email-open" disabled={!matches.length} onClick={() => setEmailTarget('totals')}>Enviar acumulado en PDF</button>
             {totals.length ? <div className="table-scroll"><table><thead><tr>{totalHeader('Dorsal', 'number')}{totalHeader('Jugador', 'name')}{totalHeader('Partidos', 'appearances')}{totalHeader('Tit.', 'starts')}{totalHeader('Minutos', 'minutes')}{totalHeader('Goles', 'goals')}</tr></thead><tbody>{totals.map((item) => <tr key={item.player.id}><td>{item.player.number ?? '—'}</td><td><strong>{item.player.name}</strong></td><td>{item.appearances}</td><td>{item.starts}</td><td><strong>{item.minutes}</strong></td><td><strong>{item.goals}</strong></td></tr>)}</tbody></table></div> : <div className="empty-state compact"><UsersRound size={30} /><h2>Sin minutos registrados</h2><p>Los totales aparecerán después de guardar el primer partido.</p></div>}
           </article>
@@ -238,7 +241,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
               </details>
             </article>)}</div> : <div className="empty-state compact"><Trophy size={30} /><h2>Todavía no hay partidos</h2><button className="text-button" onClick={() => setMode('new')}>Registrar el primero</button></div>}
           </article>
-          {emailTarget && <ReportEmailDialog key={emailLabel} label={emailLabel} createPdf={makeEmailPdf} canSchedule={emailTarget === 'totals'} onClose={() => setEmailTarget(null)} />}
+          {emailTarget && <ReportEmailDialog key={emailLabel} label={emailLabel} createPdf={makeEmailPdf} canSchedule={emailTarget === 'totals' || emailTarget === 'discipline'} reportKind={emailTarget === 'discipline' ? 'discipline' : undefined} onClose={() => setEmailTarget(null)} />}
         </div>
       </section>}
     </main>
